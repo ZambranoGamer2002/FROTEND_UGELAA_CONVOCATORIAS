@@ -1,182 +1,150 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
-import { useFormik } from "formik";
-import * as Yup from "yup";
-import { connect } from "react-redux";
-import { FormattedMessage, injectIntl } from "react-intl";
-import * as auth from "../_redux/authRedux";
-import { login } from "../_redux/authCrud";
+import React, {useState} from 'react'
+import {useHistory, Link} from 'react-router-dom'
 
-/*
-  INTL (i18n) docs:
-  https://github.com/formatjs/react-intl/blob/master/docs/Components.md#formattedmessage
-*/
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000'
 
-/*
-  Formik+YUP:
-  https://jaredpalmer.com/formik/docs/tutorial#getfieldprops
-*/
+const fondoUrl = process.env.PUBLIC_URL + '/media/bg/fondo_sesion.jpg'
+const logoUrl = process.env.PUBLIC_URL + '/media/logos/LOGO_UGELAA.png'
 
-const initialValues = {
-  email: "admin@demo.com",
-  password: "demo",
-};
+const Login = () => {
+  const history = useHistory()
 
-function Login(props) {
-  const { intl } = props;
-  const [loading, setLoading] = useState(false);
-  const LoginSchema = Yup.object().shape({
-    email: Yup.string()
-      .email("Wrong email format")
-      .min(3, "Minimum 3 symbols")
-      .max(50, "Maximum 50 symbols")
-      .required(
-        intl.formatMessage({
-          id: "AUTH.VALIDATION.REQUIRED_FIELD",
-        })
-      ),
-    password: Yup.string()
-      .min(3, "Minimum 3 symbols")
-      .max(50, "Maximum 50 symbols")
-      .required(
-        intl.formatMessage({
-          id: "AUTH.VALIDATION.REQUIRED_FIELD",
-        })
-      ),
-  });
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  const enableLoading = () => {
-    setLoading(true);
-  };
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
 
-  const disableLoading = () => {
-    setLoading(false);
-  };
+    try {
+      const resp = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({username, password}),
+      })
 
-  const getInputClasses = (fieldname) => {
-    if (formik.touched[fieldname] && formik.errors[fieldname]) {
-      return "is-invalid";
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}))
+        throw new Error(data.detail || 'No se pudo iniciar sesión')
+      }
+
+      const data = await resp.json()
+
+      localStorage.setItem('access_token', data.access_token)
+      localStorage.setItem('user_role', data.role || '')
+
+      history.push('/dashboard')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
     }
-
-    if (formik.touched[fieldname] && !formik.errors[fieldname]) {
-      return "is-valid";
-    }
-
-    return "";
-  };
-
-  const formik = useFormik({
-    initialValues,
-    validationSchema: LoginSchema,
-    onSubmit: (values, { setStatus, setSubmitting }) => {
-      enableLoading();
-      setTimeout(() => {
-        login(values.email, values.password)
-          .then(({ data: { authToken } }) => {
-            disableLoading();
-
-            props.login(authToken);
-          })
-          .catch(() => {
-            setStatus(
-              intl.formatMessage({
-                id: "AUTH.VALIDATION.INVALID_LOGIN",
-              })
-            );
-          })
-          .finally(() => {
-            disableLoading();
-            setSubmitting(false);
-          });
-      }, 1000);
-    },
-  });
+  }
 
   return (
-    <div className="login-form login-signin" id="kt_login_signin_form">
-      {/* begin::Head */}
-      <div className="text-center mb-10 mb-lg-20">
-        <h3 className="font-size-h1">
-          <FormattedMessage id="AUTH.LOGIN.TITLE" />
-        </h3>
-        <p className="text-muted font-weight-bold">
-          Enter your username and password
-        </p>
+    <div
+      className='d-flex flex-column flex-root'
+      style={{
+        minHeight: '100vh',
+        backgroundImage: `url(${fondoUrl})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
+      <div className='d-flex flex-center flex-column flex-column-fluid p-10'>
+        {/* Card */}
+        <div className='card w-100 max-w-450px shadow-lg'>
+          <div className='card-body p-10'>
+            {/* Logo */}
+            <div className='d-flex flex-center mb-5'>
+              <img src={logoUrl} alt='UGELAA' style={{maxHeight: 70}} />
+            </div>
+
+            {/* Título */}
+            <div className='text-center mb-7'>
+              <h2 className='fw-bold text-dark mb-2'>Iniciar sesión</h2>
+              <div className='text-muted fs-7'>
+                Portal de Contratación Docente UGEL Alto Amazonas
+              </div>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className='alert alert-danger py-2 mb-4'>
+                {error}
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className='form w-100'>
+              <div className='mb-5'>
+                <label className='form-label fw-semibold'>Usuario</label>
+                <input
+                  type='text'
+                  className='form-control form-control-lg'
+                  placeholder='Ingresa tu usuario'
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className='mb-3'>
+                <label className='form-label fw-semibold'>Contraseña</label>
+                <input
+                  type='password'
+                  className='form-control form-control-lg'
+                  placeholder='Ingresa tu contraseña'
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className='d-flex justify-content-between align-items-center mb-5'>
+                <a href='/auth/forgot-password' className='link-primary fs-7'>
+                  ¿Olvidaste tu contraseña?
+                </a>
+
+                {/* enlace a registro */}
+                <span className='fs-7'>
+                  ¿No tienes cuenta?{' '}
+                  <Link to='/auth/registration' className='link-primary fw-bold'>
+                    Regístrate
+                  </Link>
+                </span>
+              </div>
+
+              <div className='d-grid'>
+                <button
+                  type='submit'
+                  className='btn btn-primary btn-lg'
+                  disabled={loading}
+                >
+                  {loading ? 'Validando...' : 'Ingresar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        {/* Texto informativo (si quieres mantenerlo) */}
+        <div className='text-center text-white mt-5 fs-7'>
+          También puedes acercarte a la UGEL Alto Amazonas – área de
+          contratación docente para apoyo en el registro.
+        </div>
+
+        <div className='text-center text-white-50 fs-8 mt-3'>
+          UGEL Alto Amazonas &copy; {new Date().getFullYear()}
+        </div>
       </div>
-      {/* end::Head */}
-
-      {/*begin::Form*/}
-      <form
-        onSubmit={formik.handleSubmit}
-        className="form fv-plugins-bootstrap fv-plugins-framework"
-      >
-        {formik.status ? (
-          <div className="mb-10 alert alert-custom alert-light-danger alert-dismissible">
-            <div className="alert-text font-weight-bold">{formik.status}</div>
-          </div>
-        ) : (
-          <div className="mb-10 alert alert-custom alert-light-info alert-dismissible">
-            <div className="alert-text ">
-              Use account <strong>admin@demo.com</strong> and password{" "}
-              <strong>demo</strong> to continue.
-            </div>
-          </div>
-        )}
-
-        <div className="form-group fv-plugins-icon-container">
-          <input
-            placeholder="Email"
-            type="email"
-            className={`form-control form-control-solid h-auto py-5 px-6 ${getInputClasses(
-              "email"
-            )}`}
-            name="email"
-            {...formik.getFieldProps("email")}
-          />
-          {formik.touched.email && formik.errors.email ? (
-            <div className="fv-plugins-message-container">
-              <div className="fv-help-block">{formik.errors.email}</div>
-            </div>
-          ) : null}
-        </div>
-        <div className="form-group fv-plugins-icon-container">
-          <input
-            placeholder="Password"
-            type="password"
-            className={`form-control form-control-solid h-auto py-5 px-6 ${getInputClasses(
-              "password"
-            )}`}
-            name="password"
-            {...formik.getFieldProps("password")}
-          />
-          {formik.touched.password && formik.errors.password ? (
-            <div className="fv-plugins-message-container">
-              <div className="fv-help-block">{formik.errors.password}</div>
-            </div>
-          ) : null}
-        </div>
-        <div className="form-group d-flex flex-wrap justify-content-between align-items-center">
-          <Link
-            to="/auth/forgot-password"
-            className="text-dark-50 text-hover-primary my-3 mr-2"
-            id="kt_login_forgot"
-          >
-            <FormattedMessage id="AUTH.GENERAL.FORGOT_BUTTON" />
-          </Link>
-          <button
-            id="kt_login_signin_submit"
-            type="submit"
-            disabled={formik.isSubmitting}
-            className={`btn btn-primary font-weight-bold px-9 py-4 my-3`}
-          >
-            <span>Sign In</span>
-            {loading && <span className="ml-3 spinner spinner-white"></span>}
-          </button>
-        </div>
-      </form>
-      {/*end::Form*/}
     </div>
-  );
+  )
 }
 
-export default injectIntl(connect(null, auth.actions)(Login));
+export default Login
