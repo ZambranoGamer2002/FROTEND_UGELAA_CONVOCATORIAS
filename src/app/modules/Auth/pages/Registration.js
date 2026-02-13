@@ -1,10 +1,8 @@
+/* eslint-disable jsx-a11y/anchor-is-valid */
 import React, {useState} from 'react'
 import {useHistory, Link} from 'react-router-dom'
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'
-
-const fondoUrl = process.env.PUBLIC_URL + '/media/bg/fondo_sesion.jpg'
-const logoUrl = process.env.PUBLIC_URL + '/media/logos/LOGO_UGELAA.png'
 
 const Registration = () => {
   const history = useHistory()
@@ -20,8 +18,6 @@ const Registration = () => {
   const [sexo, setSexo] = useState('M')
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
 
   const [buscando, setBuscando] = useState(false)
   const [enviando, setEnviando] = useState(false)
@@ -55,14 +51,14 @@ const Registration = () => {
         throw new Error(data.detail || 'No se encontraron datos para ese documento.')
       }
 
-      const data = await resp.json()
+      const data = await resp.json().catch(() => ({}))
       const d = data.datos || {}
 
       setNombres(d.nombres || '')
       setApellidoPaterno(d.apellido_paterno || '')
       setApellidoMaterno(d.apellido_materno || '')
       setDniConsultado(true)
-      setSuccess('Datos encontrados en RENIEC. Verifica y completa la información.')
+      setSuccess('Datos encontrados. Verifica y completa la información.')
     } catch (err) {
       setDniConsultado(false)
       setNombres('')
@@ -84,14 +80,14 @@ const Registration = () => {
       return
     }
 
-    if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden.')
+    if (!fechaNacimiento) {
+      setError('Selecciona tu fecha de nacimiento.')
       return
     }
 
     setEnviando(true)
     try {
-      const resp = await fetch(`${API_BASE}/auth/registro`, {
+      const resp = await fetch(`${API_BASE}/auth/iniciar-registro`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
@@ -104,22 +100,17 @@ const Registration = () => {
           sexo,
           username,
           email,
-          password,
-          confirm_password: confirmPassword,
         }),
       })
 
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}))
-        throw new Error(data.detail || data.message || 'No se pudo completar el registro.')
-      }
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(data.detail || data.message || 'No se pudo iniciar el registro.')
 
-      const data = await resp.json()
-      setSuccess(data.message || 'Registro exitoso. Ahora puedes iniciar sesión.')
-      // Redirigir al login después de un pequeño delay
+      setSuccess(data.message || `Código de verificación enviado a ${email}. Revisa tu bandeja.`)
+
       setTimeout(() => {
-        history.push('/auth/login')
-      }, 1500)
+        history.push(`/auth/verify-code?email=${encodeURIComponent(email)}`)
+      }, 1200)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -127,207 +118,223 @@ const Registration = () => {
     }
   }
 
+  const solidInput = 'form-control form-control-solid h-auto py-5 px-6'
+
   return (
-    <div
-      className='d-flex flex-column flex-root'
-      style={{
-        minHeight: '100vh',
-        backgroundImage: `url(${fondoUrl})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }}
-    >
-      <div className='d-flex flex-center flex-column flex-column-fluid p-10'>
-        {/* Card */}
-        <div className='card w-100 max-w-600px shadow-lg'>
-          <div className='card-body p-10'>
-            {/* Logo */}
-            <div className='d-flex flex-center mb-5'>
-              <img src={logoUrl} alt='UGELAA' style={{maxHeight: 70}} />
-            </div>
+    <div className='login-form login-signin' style={{width: '100%', maxWidth: 920}}>
+      {/* Título */}
+      <div className='text-center mb-10 mb-lg-15'>
+        <h3 className='font-size-h1'>Registro de docente</h3>
+        <p className='text-muted font-weight-bold mb-0'>
+          Completa tus datos para recibir tu código de verificación.
+        </p>
+      </div>
 
-            {/* Título */}
-            <div className='text-center mb-7'>
-              <h2 className='fw-bold text-dark mb-2'>Registro de docente</h2>
-              <div className='text-muted fs-7'>
-                Completa tus datos para crear tu usuario en el portal de contratación.
-              </div>
-            </div>
+      {/* Mensajes */}
+      {error && (
+        <div className='alert alert-danger d-flex align-items-center py-3 mb-5'>
+          <span role='img' aria-label='alerta'>
+            ⚠️
+          </span>
+          <span className='ml-2'>{error}</span>
+        </div>
+      )}
+      {success && (
+        <div className='alert alert-success d-flex align-items-center py-3 mb-5'>
+          <span role='img' aria-label='ok'>
+            ✅
+          </span>
+          <span className='ml-2'>{success}</span>
+        </div>
+      )}
 
-            {/* Mensajes */}
-            {error && <div className='alert alert-danger py-2 mb-4'>{error}</div>}
-            {success && <div className='alert alert-success py-2 mb-4'>{success}</div>}
+      <form onSubmit={handleSubmit} className='form' autoComplete='off'>
+        {/* 1. Documento */}
+        <div className='mb-10'>
+          <div className='d-flex align-items-center justify-content-between mb-4'>
+            <h5 className='font-weight-bolder mb-0'>1) Documento</h5>
+            <span className={`badge ${dniConsultado ? 'badge-success' : 'badge-light'} badge-pill`}>
+              {dniConsultado ? 'Validado' : 'Pendiente'}
+            </span>
+          </div>
 
-            <form onSubmit={handleSubmit} className='form w-100'>
-              {/* FASE 1: Documento + RENIEC */}
-              <div className='mb-6'>
-                <h5 className='fw-bold mb-3'>1. Datos de documento</h5>
-                <div className='row'>
-                  <div className='col-md-4 mb-3'>
-                    <label className='form-label fw-semibold'>Tipo documento</label>
-                    <select
-                      className='form-control'
-                      value={tipoDocumento}
-                      onChange={(e) => setTipoDocumento(e.target.value)}
-                    >
-                      <option value='DNI'>DNI</option>
-                      <option value='Carnet de Extranjería'>Carnet de Extranjería</option>
-                    </select>
-                  </div>
-                  <div className='col-md-5 mb-3'>
-                    <label className='form-label fw-semibold'>N° documento</label>
-                    <input
-                      type='text'
-                      className='form-control'
-                      placeholder='Ingresa tu documento'
-                      value={numeroDocumento}
-                      onChange={(e) => setNumeroDocumento(e.target.value)}
-                      maxLength={12}
-                      required
-                    />
-                  </div>
-                  <div className='col-md-3 mb-3 d-flex align-items-end'>
-                    <button
-                      type='button'
-                      className='btn btn-secondary w-100'
-                      onClick={handleConsultarDni}
-                      disabled={buscando}
-                    >
-                      {buscando ? 'Buscando...' : 'Buscar DNI'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* FASE 1: Datos autocompletados */}
-              <div className='mb-6'>
-                <h5 className='fw-bold mb-3'>2. Datos personales (RENIEC)</h5>
-                <div className='row'>
-                  <div className='col-md-4 mb-3'>
-                    <label className='form-label fw-semibold'>Apellido paterno</label>
-                    <input
-                      type='text'
-                      className='form-control'
-                      value={apellidoPaterno}
-                      readOnly
-                    />
-                  </div>
-                  <div className='col-md-4 mb-3'>
-                    <label className='form-label fw-semibold'>Apellido materno</label>
-                    <input
-                      type='text'
-                      className='form-control'
-                      value={apellidoMaterno}
-                      readOnly
-                    />
-                  </div>
-                  <div className='col-md-4 mb-3'>
-                    <label className='form-label fw-semibold'>Nombres</label>
-                    <input
-                      type='text'
-                      className='form-control'
-                      value={nombres}
-                      readOnly
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* FASE 2: Datos para validación y credenciales */}
-              <div className='mb-6'>
-                <h5 className='fw-bold mb-3'>3. Datos para registro</h5>
-                <div className='row'>
-                  <div className='col-md-4 mb-3'>
-                    <label className='form-label fw-semibold'>Fecha de nacimiento</label>
-                    <input
-                      type='date'
-                      className='form-control'
-                      value={fechaNacimiento}
-                      onChange={(e) => setFechaNacimiento(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className='col-md-2 mb-3'>
-                    <label className='form-label fw-semibold'>Sexo</label>
-                    <select
-                      className='form-control'
-                      value={sexo}
-                      onChange={(e) => setSexo(e.target.value)}
-                    >
-                      <option value='M'>M</option>
-                      <option value='F'>F</option>
-                    </select>
-                  </div>
-                  <div className='col-md-6 mb-3'>
-                    <label className='form-label fw-semibold'>Correo electrónico</label>
-                    <input
-                      type='email'
-                      className='form-control'
-                      placeholder='ejemplo@correo.com'
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className='row'>
-                  <div className='col-md-4 mb-3'>
-                    <label className='form-label fw-semibold'>Usuario</label>
-                    <input
-                      type='text'
-                      className='form-control'
-                      placeholder='Nombre de usuario'
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className='col-md-4 mb-3'>
-                    <label className='form-label fw-semibold'>Contraseña</label>
-                    <input
-                      type='password'
-                      className='form-control'
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className='col-md-4 mb-3'>
-                    <label className='form-label fw-semibold'>Confirmar contraseña</label>
-                    <input
-                      type='password'
-                      className='form-control'
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Botones */}
-              <div className='d-flex justify-content-between align-items-center'>
-                <Link to='/auth/login' className='btn btn-light'>
-                  Volver al inicio de sesión
-                </Link>
-                <button
-                  type='submit'
-                  className='btn btn-primary'
-                  disabled={enviando}
+          <div className='row'>
+            <div className='col-lg-3 col-md-4'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>Tipo</label>
+                <select
+                  className={solidInput}
+                  value={tipoDocumento}
+                  onChange={(e) => setTipoDocumento(e.target.value)}
+                  disabled={buscando || enviando}
                 >
-                  {enviando ? 'Registrando...' : 'Registrar cuenta'}
+                  <option value='DNI'>DNI</option>
+                  <option value='Carnet de Extranjería'>Carnet de Extranjería</option>
+                </select>
+              </div>
+            </div>
+
+            <div className='col-lg-5 col-md-8'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>N° documento</label>
+                <input
+                  type='text'
+                  className={solidInput}
+                  placeholder='Ingresa tu documento'
+                  value={numeroDocumento}
+                  onChange={(e) => setNumeroDocumento(e.target.value)}
+                  maxLength={12}
+                  required
+                  disabled={buscando || enviando}
+                />
+              </div>
+            </div>
+
+            <div className='col-lg-4'>
+              <div className='form-group'>
+                <label className='font-weight-bold d-none d-lg-block'>&nbsp;</label>
+                <button
+                  type='button'
+                  className='btn btn-secondary font-weight-bold px-9 py-4 w-100'
+                  onClick={handleConsultarDni}
+                  disabled={buscando || enviando}
+                >
+                  {buscando ? (
+                    <>
+                      <span className='spinner-border spinner-border-sm mr-2' role='status' aria-hidden='true' />
+                      Buscando...
+                    </>
+                  ) : (
+                    'Buscar en RENIEC'
+                  )}
                 </button>
               </div>
-            </form>
+            </div>
+          </div>
+
+          <span className='form-text text-muted'>
+            Consulta tu documento para autocompletar apellidos y nombres.
+          </span>
+        </div>
+
+        {/* 2. Datos personales (RENIEC) */}
+        <div className='mb-10'>
+          <h5 className='font-weight-bolder mb-4'>2) Datos personales (RENIEC)</h5>
+
+          <div className='row'>
+            <div className='col-lg-4 col-md-6'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>Apellido paterno</label>
+                <input type='text' className={solidInput} value={apellidoPaterno} readOnly />
+              </div>
+            </div>
+
+            <div className='col-lg-4 col-md-6'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>Apellido materno</label>
+                <input type='text' className={solidInput} value={apellidoMaterno} readOnly />
+              </div>
+            </div>
+
+            <div className='col-lg-4'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>Nombres</label>
+                <input type='text' className={solidInput} value={nombres} readOnly />
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className='text-center text-white-50 fs-8 mt-4'>
-          UGEL Alto Amazonas &copy; {new Date().getFullYear()}
+        {/* 3. Datos para registro */}
+        <div className='mb-10'>
+          <h5 className='font-weight-bolder mb-4'>3) Datos para registro</h5>
+
+          <div className='row'>
+            <div className='col-lg-4 col-md-6'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>Fecha de nacimiento</label>
+                <input
+                  type='date'
+                  className={solidInput}
+                  value={fechaNacimiento}
+                  onChange={(e) => setFechaNacimiento(e.target.value)}
+                  required
+                  disabled={enviando}
+                />
+              </div>
+            </div>
+
+            <div className='col-lg-2 col-md-6'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>Sexo</label>
+                <select
+                  className={solidInput}
+                  value={sexo}
+                  onChange={(e) => setSexo(e.target.value)}
+                  disabled={enviando}
+                >
+                  <option value='M'>M</option>
+                  <option value='F'>F</option>
+                </select>
+              </div>
+            </div>
+
+            <div className='col-lg-6'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>Correo electrónico</label>
+                <input
+                  type='email'
+                  className={solidInput}
+                  placeholder='ejemplo@correo.com'
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={enviando}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className='row'>
+            <div className='col-lg-6 col-md-8'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>Usuario</label>
+                <input
+                  type='text'
+                  className={solidInput}
+                  placeholder='Nombre de usuario'
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                  disabled={enviando}
+                />
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+
+        {/* Acciones */}
+        <div className='d-flex flex-wrap justify-content-between align-items-center'>
+          <Link to='/auth/login' className='text-muted text-hover-primary'>
+            Volver al inicio de sesión
+          </Link>
+
+          <button
+            type='submit'
+            className='btn btn-primary font-weight-bold px-9 py-4 my-3'
+            disabled={enviando}
+          >
+            {enviando ? (
+              <>
+                <span className='spinner-border spinner-border-sm mr-2' role='status' aria-hidden='true' />
+                Enviando código...
+              </>
+            ) : (
+              'Enviar código de verificación'
+            )}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }

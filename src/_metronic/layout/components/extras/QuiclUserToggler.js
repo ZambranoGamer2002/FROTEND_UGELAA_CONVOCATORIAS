@@ -17,6 +17,13 @@ export function QuickUserToggler() {
     };
   }, [uiService]);
 
+  // ✅ Protección: si no hay usuario aún, no renderizar nada
+  if (!user) return null;
+
+  // ✅ Valores seguros con fallback
+  const fullname = user.fullname || user.username || "Usuario"
+  const inicialNombre = fullname.charAt(0).toUpperCase()
+
   return (
     <>
       {layoutProps.offcanvas && (
@@ -31,14 +38,14 @@ export function QuickUserToggler() {
             >
               <>
                 <span className="text-muted font-weight-bold font-size-base d-none d-md-inline mr-1">
-                  Hi,
+                  Hola,
                 </span>
                 <span className="text-dark-50 font-weight-bolder font-size-base d-none d-md-inline mr-3">
-                  {user.fullname}
+                  {fullname}
                 </span>
                 <span className="symbol symbol-35 symbol-light-success">
                   <span className="symbol-label font-size-h5 font-weight-bold">
-                    {user.fullname[0]}
+                    {inicialNombre}
                   </span>
                 </span>
               </>

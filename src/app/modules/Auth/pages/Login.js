@@ -1,18 +1,33 @@
 import React, {useState} from 'react'
 import {useHistory, Link} from 'react-router-dom'
+import {connect} from 'react-redux'
+import {injectIntl} from 'react-intl'
+import * as auth from '../_redux/authRedux'
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000'
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'
 
-const fondoUrl = process.env.PUBLIC_URL + '/media/bg/fondo_sesion.jpg'
-const logoUrl = process.env.PUBLIC_URL + '/media/logos/LOGO_UGELAA.png'
+const IconEye = ({show}) =>
+  show ? (
+    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
+      <path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z' />
+      <circle cx='12' cy='12' r='3' />
+    </svg>
+  ) : (
+    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
+      <path d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24' />
+      <line x1='1' y1='1' x2='23' y2='23' />
+    </svg>
+  )
 
-const Login = () => {
+function Login(props) {
   const history = useHistory()
+  const {login: loginAction, fulfillUser} = props
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -20,25 +35,38 @@ const Login = () => {
     setLoading(true)
 
     try {
-      const resp = await fetch(`${API_URL}/auth/login`, {
+      const resp = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({username, password}),
       })
 
+      const data = await resp.json().catch(() => ({}))
+
       if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}))
-        throw new Error(data.detail || 'No se pudo iniciar sesión')
+        throw new Error(data.detail || data.message || 'Credenciales incorrectas.')
       }
 
-      const data = await resp.json()
+      const {access_token, refresh_token, user} = data
 
-      localStorage.setItem('access_token', data.access_token)
-      localStorage.setItem('user_role', data.role || '')
+      localStorage.setItem('access_token', access_token)
+      localStorage.setItem('refresh_token', refresh_token)
+      localStorage.setItem('user', JSON.stringify(user))
 
-      history.push('/dashboard')
+      if (loginAction) loginAction(access_token)
+
+      if (fulfillUser && user) {
+        fulfillUser({
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          fullname: user.nombre_completo,
+          role: user.role,
+          pic: '/media/avatars/blank.png',
+        })
+      }
+
+      setTimeout(() => history.push('/dashboard'), 100)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -47,104 +75,98 @@ const Login = () => {
   }
 
   return (
-    <div
-      className='d-flex flex-column flex-root'
-      style={{
-        minHeight: '100vh',
-        backgroundImage: `url(${fondoUrl})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }}
-    >
-      <div className='d-flex flex-center flex-column flex-column-fluid p-10'>
-        {/* Card */}
-        <div className='card w-100 max-w-450px shadow-lg'>
-          <div className='card-body p-10'>
-            {/* Logo */}
-            <div className='d-flex flex-center mb-5'>
-              <img src={logoUrl} alt='UGELAA' style={{maxHeight: 70}} />
-            </div>
-
-            {/* Título */}
-            <div className='text-center mb-7'>
-              <h2 className='fw-bold text-dark mb-2'>Iniciar sesión</h2>
-              <div className='text-muted fs-7'>
-                Portal de Contratación Docente UGEL Alto Amazonas
-              </div>
-            </div>
-
-            {/* Error */}
-            {error && (
-              <div className='alert alert-danger py-2 mb-4'>
-                {error}
-              </div>
-            )}
-
-            {/* Form */}
-            <form onSubmit={handleSubmit} className='form w-100'>
-              <div className='mb-5'>
-                <label className='form-label fw-semibold'>Usuario</label>
-                <input
-                  type='text'
-                  className='form-control form-control-lg'
-                  placeholder='Ingresa tu usuario'
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className='mb-3'>
-                <label className='form-label fw-semibold'>Contraseña</label>
-                <input
-                  type='password'
-                  className='form-control form-control-lg'
-                  placeholder='Ingresa tu contraseña'
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className='d-flex justify-content-between align-items-center mb-5'>
-                <a href='/auth/forgot-password' className='link-primary fs-7'>
-                  ¿Olvidaste tu contraseña?
-                </a>
-
-                {/* enlace a registro */}
-                <span className='fs-7'>
-                  ¿No tienes cuenta?{' '}
-                  <Link to='/auth/registration' className='link-primary fw-bold'>
-                    Regístrate
-                  </Link>
-                </span>
-              </div>
-
-              <div className='d-grid'>
-                <button
-                  type='submit'
-                  className='btn btn-primary btn-lg'
-                  disabled={loading}
-                >
-                  {loading ? 'Validando...' : 'Ingresar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        {/* Texto informativo (si quieres mantenerlo) */}
-        <div className='text-center text-white mt-5 fs-7'>
-          También puedes acercarte a la UGEL Alto Amazonas – área de
-          contratación docente para apoyo en el registro.
-        </div>
-
-        <div className='text-center text-white-50 fs-8 mt-3'>
-          UGEL Alto Amazonas &copy; {new Date().getFullYear()}
-        </div>
+    <div className='login-form login-signin'>
+      {/* Título */}
+      <div className='text-center mb-10 mb-lg-20'>
+        <h3 className='font-size-h1'>Iniciar sesión</h3>
+        <p className='text-muted font-weight-bold'>
+          Portal de Contratación Docente · UGEL Alto Amazonas
+        </p>
       </div>
+
+      {/* Error */}
+      {error && (
+        <div className='alert alert-danger d-flex align-items-center py-3 mb-5'>
+          <span role='img' aria-label='advertencia'>
+            ⚠️
+          </span>
+          <span className='ml-2'>{error}</span>
+        </div>
+      )}
+
+      {/* Form */}
+      <form onSubmit={handleSubmit} className='form' autoComplete='off'>
+        {/* Usuario */}
+        <div className='form-group'>
+          <input
+            className='form-control form-control-solid h-auto py-5 px-6'
+            type='text'
+            placeholder='Usuario o correo electrónico'
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete='username'
+            required
+          />
+        </div>
+
+        {/* Contraseña */}
+        <div className='form-group position-relative'>
+          <input
+            className='form-control form-control-solid h-auto py-5 px-6'
+            type={showPassword ? 'text' : 'password'}
+            placeholder='Contraseña'
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete='current-password'
+            required
+          />
+
+          <button
+            type='button'
+            className='btn btn-link position-absolute right-0 top-0 mt-3 mr-4'
+            onClick={() => setShowPassword(!showPassword)}
+            style={{color: '#a1a5b7'}}
+            tabIndex={-1}
+            aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+          >
+            <IconEye show={showPassword} />
+          </button>
+        </div>
+
+        {/* Links */}
+        <div className='form-group d-flex flex-wrap justify-content-between align-items-center'>
+          <Link to='/auth/forgot-password' className='text-muted text-hover-primary'>
+            ¿Olvidaste tu contraseña?
+          </Link>
+
+          <Link to='/auth/registration' className='text-muted text-hover-primary'>
+            ¿No tienes cuenta? <span className='font-weight-bold'>Regístrate</span>
+          </Link>
+        </div>
+
+        {/* Submit */}
+        <div className='form-group text-center mt-10'>
+          <button type='submit' className='btn btn-primary font-weight-bold px-9 py-4 my-3' disabled={loading}>
+            {loading ? (
+              <>
+                <span className='spinner-border spinner-border-sm mr-2' role='status' aria-hidden='true' />
+                Ingresando...
+              </>
+            ) : (
+              'Ingresar al sistema'
+            )}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }
 
-export default Login
+const mapDispatchToProps = (dispatch) => ({
+  login: (authToken) => dispatch(auth.actions.login(authToken)),
+  fulfillUser: (user) => {
+    if (auth.actions.fulfillUser) dispatch(auth.actions.fulfillUser(user))
+  },
+})
+
+export default injectIntl(connect(null, mapDispatchToProps)(Login))
