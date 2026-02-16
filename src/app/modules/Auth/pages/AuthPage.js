@@ -9,6 +9,8 @@ import Registration from './Registration'
 import VerifyCode from './VerifyCode'
 import CreatePassword from './CreatePassword'
 
+import ForgotPassword from './ForgotPassword'
+
 import '../../../../_metronic/_assets/sass/pages/login/classic/login-1.scss'
 
 export function AuthPage() {
@@ -90,6 +92,8 @@ export function AuthPage() {
                 <ContentRoute path='/auth/registration' component={Registration} />
                 <ContentRoute path='/auth/verify-code' component={VerifyCode} />
                 <ContentRoute path='/auth/create-password' component={CreatePassword} />
+                <ContentRoute path='/auth/forgot-password' component={ForgotPassword} />
+
 
                 <Redirect from='/auth' exact={true} to='/auth/login' />
                 <Redirect to='/auth/login' />
