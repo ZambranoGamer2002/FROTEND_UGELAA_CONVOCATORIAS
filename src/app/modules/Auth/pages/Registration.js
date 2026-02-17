@@ -1,87 +1,126 @@
 /* eslint-disable jsx-a11y/anchor-is-valid */
-import React, {useState} from 'react'
+import React, {useState, useEffect} from 'react'
 import {useHistory, Link} from 'react-router-dom'
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'
+const API_BASE = 'http://localhost:8000/api/v1'
 
 const Registration = () => {
   const history = useHistory()
 
+  // Datos personales
   const [tipoDocumento, setTipoDocumento] = useState('DNI')
   const [numeroDocumento, setNumeroDocumento] = useState('')
-
   const [nombres, setNombres] = useState('')
   const [apellidoPaterno, setApellidoPaterno] = useState('')
   const [apellidoMaterno, setApellidoMaterno] = useState('')
-
   const [fechaNacimiento, setFechaNacimiento] = useState('')
   const [sexo, setSexo] = useState('M')
-  const [username, setUsername] = useState('')
+  const [celular, setCelular] = useState('')
+
+  // Datos de acceso
   const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
 
-  const [buscando, setBuscando] = useState(false)
+  // Ubigeo
+  const [departamentos, setDepartamentos] = useState([])
+  const [provincias, setProvincias] = useState([])
+  const [distritos, setDistritos] = useState([])
+  const [departamentoId, setDepartamentoId] = useState('')
+  const [provinciaId, setProvinciaId] = useState('')
+  const [distritoId, setDistritoId] = useState('')
+  const [direccion, setDireccion] = useState('')
+
+  // Estados UI
+  const [cargandoDepartamentos, setCargandoDepartamentos] = useState(true)
+  const [cargandoProvincias, setCargandoProvincias] = useState(false)
+  const [cargandoDistritos, setCargandoDistritos] = useState(false)
   const [enviando, setEnviando] = useState(false)
-  const [dniConsultado, setDniConsultado] = useState(false)
-
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  const handleConsultarDni = async () => {
-    setError('')
-    setSuccess('')
+  // ── Helpers para normalizar respuesta a array ──
+  const toArray = (data) => {
+    if (Array.isArray(data)) return data
+    if (data && Array.isArray(data.data)) return data.data
+    if (data && Array.isArray(data.items)) return data.items
+    if (data && Array.isArray(data.results)) return data.results
+    return []
+  }
 
-    if (!numeroDocumento || numeroDocumento.length < 8) {
-      setError('Ingresa un número de documento válido.')
-      return
-    }
-
-    setBuscando(true)
-    try {
-      const resp = await fetch(`${API_BASE}/auth/consultar-dni`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          tipo_documento: tipoDocumento,
-          numero_documento: numeroDocumento,
-        }),
-      })
-
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}))
-        throw new Error(data.detail || 'No se encontraron datos para ese documento.')
+  // ── Cargar departamentos al montar ──
+  useEffect(() => {
+    let mounted = true
+    const cargar = async () => {
+      try {
+        const resp = await fetch(`${API_BASE}/ubigeo/departamentos`)
+        const data = await resp.json()
+        if (mounted) setDepartamentos(toArray(data))
+      } catch (err) {
+        if (mounted) setError('No se pudieron cargar los departamentos. Verifica la conexión.')
+      } finally {
+        if (mounted) setCargandoDepartamentos(false)
       }
+    }
+    cargar()
+    return () => { mounted = false }
+  }, [])
 
-      const data = await resp.json().catch(() => ({}))
-      const d = data.datos || {}
+  // ── Cargar provincias ──
+  const handleDepartamentoChange = async (e) => {
+    const deptId = e.target.value
+    setDepartamentoId(deptId)
+    setProvinciaId('')
+    setDistritoId('')
+    setProvincias([])
+    setDistritos([])
 
-      setNombres(d.nombres || '')
-      setApellidoPaterno(d.apellido_paterno || '')
-      setApellidoMaterno(d.apellido_materno || '')
-      setDniConsultado(true)
-      setSuccess('Datos encontrados. Verifica y completa la información.')
-    } catch (err) {
-      setDniConsultado(false)
-      setNombres('')
-      setApellidoPaterno('')
-      setApellidoMaterno('')
-      setError(err.message)
+    if (!deptId) return
+
+    setCargandoProvincias(true)
+    try {
+      const resp = await fetch(`${API_BASE}/ubigeo/provincias/${deptId}`)
+      const data = await resp.json()
+      setProvincias(toArray(data))
+    } catch {
+      setError('No se pudieron cargar las provincias.')
     } finally {
-      setBuscando(false)
+      setCargandoProvincias(false)
     }
   }
 
+  // ── Cargar distritos ──
+  const handleProvinciaChange = async (e) => {
+    const provId = e.target.value
+    setProvinciaId(provId)
+    setDistritoId('')
+    setDistritos([])
+
+    if (!provId) return
+
+    setCargandoDistritos(true)
+    try {
+      const resp = await fetch(`${API_BASE}/ubigeo/distritos/${provId}`)
+      const data = await resp.json()
+      setDistritos(toArray(data))
+    } catch {
+      setError('No se pudieron cargar los distritos.')
+    } finally {
+      setCargandoDistritos(false)
+    }
+  }
+
+  // ── Enviar formulario ──
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setSuccess('')
 
-    if (!dniConsultado) {
-      setError('Primero debes buscar y validar tu DNI en RENIEC.')
+    if (!departamentoId || !provinciaId || !distritoId) {
+      setError('Debes seleccionar departamento, provincia y distrito.')
       return
     }
-
-    if (!fechaNacimiento) {
-      setError('Selecciona tu fecha de nacimiento.')
+    if (!celular || celular.length < 9) {
+      setError('Ingresa un número de celular válido.')
       return
     }
 
@@ -98,19 +137,23 @@ const Registration = () => {
           apellido_materno: apellidoMaterno,
           fecha_nacimiento: fechaNacimiento,
           sexo,
-          username,
+          celular,
           email,
+          username,
+          departamento_id: parseInt(departamentoId),
+          provincia_id: parseInt(provinciaId),
+          distrito_id: parseInt(distritoId),
+          direccion,
         }),
       })
 
       const data = await resp.json().catch(() => ({}))
-      if (!resp.ok) throw new Error(data.detail || data.message || 'No se pudo iniciar el registro.')
+      if (!resp.ok) throw new Error(data.detail || 'No se pudo iniciar el registro.')
 
-      setSuccess(data.message || `Código de verificación enviado a ${email}. Revisa tu bandeja.`)
-
+      setSuccess(data.message || `Código enviado a ${email}. Revisa tu bandeja de entrada.`)
       setTimeout(() => {
         history.push(`/auth/verify-code?email=${encodeURIComponent(email)}`)
-      }, 1200)
+      }, 1500)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -122,42 +165,34 @@ const Registration = () => {
 
   return (
     <div className='login-form login-signin' style={{width: '100%', maxWidth: 920}}>
+
       {/* Título */}
       <div className='text-center mb-10 mb-lg-15'>
         <h3 className='font-size-h1'>Registro de docente</h3>
         <p className='text-muted font-weight-bold mb-0'>
-          Completa tus datos para recibir tu código de verificación.
+          Completa todos tus datos para crear tu cuenta
         </p>
       </div>
 
       {/* Mensajes */}
       {error && (
         <div className='alert alert-danger d-flex align-items-center py-3 mb-5'>
-          <span role='img' aria-label='alerta'>
-            ⚠️
-          </span>
+          <span role='img' aria-label='alerta'>⚠️</span>
           <span className='ml-2'>{error}</span>
         </div>
       )}
       {success && (
         <div className='alert alert-success d-flex align-items-center py-3 mb-5'>
-          <span role='img' aria-label='ok'>
-            ✅
-          </span>
+          <span role='img' aria-label='ok'>✅</span>
           <span className='ml-2'>{success}</span>
         </div>
       )}
 
       <form onSubmit={handleSubmit} className='form' autoComplete='off'>
-        {/* 1. Documento */}
-        <div className='mb-10'>
-          <div className='d-flex align-items-center justify-content-between mb-4'>
-            <h5 className='font-weight-bolder mb-0'>1) Documento</h5>
-            <span className={`badge ${dniConsultado ? 'badge-success' : 'badge-light'} badge-pill`}>
-              {dniConsultado ? 'Validado' : 'Pendiente'}
-            </span>
-          </div>
 
+        {/* ── 1. Documento ── */}
+        <div className='mb-10'>
+          <h5 className='font-weight-bolder mb-4'>1) Documento de identidad</h5>
           <div className='row'>
             <div className='col-lg-3 col-md-4'>
               <div className='form-group'>
@@ -166,7 +201,7 @@ const Registration = () => {
                   className={solidInput}
                   value={tipoDocumento}
                   onChange={(e) => setTipoDocumento(e.target.value)}
-                  disabled={buscando || enviando}
+                  disabled={enviando}
                 >
                   <option value='DNI'>DNI</option>
                   <option value='Carnet de Extranjería'>Carnet de Extranjería</option>
@@ -174,80 +209,74 @@ const Registration = () => {
               </div>
             </div>
 
-            <div className='col-lg-5 col-md-8'>
+            <div className='col-lg-9 col-md-8'>
               <div className='form-group'>
-                <label className='font-weight-bold'>N° documento</label>
+                <label className='font-weight-bold'>Número de documento</label>
                 <input
                   type='text'
                   className={solidInput}
-                  placeholder='Ingresa tu documento'
+                  placeholder='Ingresa tu número de documento'
                   value={numeroDocumento}
                   onChange={(e) => setNumeroDocumento(e.target.value)}
                   maxLength={12}
                   required
-                  disabled={buscando || enviando}
+                  disabled={enviando}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 2. Datos personales ── */}
+        <div className='mb-10'>
+          <h5 className='font-weight-bolder mb-4'>2) Datos personales</h5>
+
+          <div className='row'>
+            <div className='col-lg-4'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>Nombres</label>
+                <input
+                  type='text'
+                  className={solidInput}
+                  placeholder='Nombres completos'
+                  value={nombres}
+                  onChange={(e) => setNombres(e.target.value.toUpperCase())}
+                  required
+                  disabled={enviando}
                 />
               </div>
             </div>
 
-            <div className='col-lg-4'>
-              <div className='form-group'>
-                <label className='font-weight-bold d-none d-lg-block'>&nbsp;</label>
-                <button
-                  type='button'
-                  className='btn btn-secondary font-weight-bold px-9 py-4 w-100'
-                  onClick={handleConsultarDni}
-                  disabled={buscando || enviando}
-                >
-                  {buscando ? (
-                    <>
-                      <span className='spinner-border spinner-border-sm mr-2' role='status' aria-hidden='true' />
-                      Buscando...
-                    </>
-                  ) : (
-                    'Buscar en RENIEC'
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <span className='form-text text-muted'>
-            Consulta tu documento para autocompletar apellidos y nombres.
-          </span>
-        </div>
-
-        {/* 2. Datos personales (RENIEC) */}
-        <div className='mb-10'>
-          <h5 className='font-weight-bolder mb-4'>2) Datos personales (RENIEC)</h5>
-
-          <div className='row'>
             <div className='col-lg-4 col-md-6'>
               <div className='form-group'>
                 <label className='font-weight-bold'>Apellido paterno</label>
-                <input type='text' className={solidInput} value={apellidoPaterno} readOnly />
+                <input
+                  type='text'
+                  className={solidInput}
+                  placeholder='Apellido paterno'
+                  value={apellidoPaterno}
+                  onChange={(e) => setApellidoPaterno(e.target.value.toUpperCase())}
+                  required
+                  disabled={enviando}
+                />
               </div>
             </div>
 
             <div className='col-lg-4 col-md-6'>
               <div className='form-group'>
                 <label className='font-weight-bold'>Apellido materno</label>
-                <input type='text' className={solidInput} value={apellidoMaterno} readOnly />
-              </div>
-            </div>
-
-            <div className='col-lg-4'>
-              <div className='form-group'>
-                <label className='font-weight-bold'>Nombres</label>
-                <input type='text' className={solidInput} value={nombres} readOnly />
+                <input
+                  type='text'
+                  className={solidInput}
+                  placeholder='Apellido materno'
+                  value={apellidoMaterno}
+                  onChange={(e) => setApellidoMaterno(e.target.value.toUpperCase())}
+                  required
+                  disabled={enviando}
+                />
               </div>
             </div>
           </div>
-        </div>
-
-        {/* 3. Datos para registro */}
-        <div className='mb-10'>
-          <h5 className='font-weight-bolder mb-4'>3) Datos para registro</h5>
 
           <div className='row'>
             <div className='col-lg-4 col-md-6'>
@@ -264,7 +293,7 @@ const Registration = () => {
               </div>
             </div>
 
-            <div className='col-lg-2 col-md-6'>
+            <div className='col-lg-2 col-md-3'>
               <div className='form-group'>
                 <label className='font-weight-bold'>Sexo</label>
                 <select
@@ -273,38 +302,22 @@ const Registration = () => {
                   onChange={(e) => setSexo(e.target.value)}
                   disabled={enviando}
                 >
-                  <option value='M'>M</option>
-                  <option value='F'>F</option>
+                  <option value='M'>Masculino</option>
+                  <option value='F'>Femenino</option>
                 </select>
               </div>
             </div>
 
-            <div className='col-lg-6'>
+            <div className='col-lg-6 col-md-9'>
               <div className='form-group'>
-                <label className='font-weight-bold'>Correo electrónico</label>
+                <label className='font-weight-bold'>Celular</label>
                 <input
-                  type='email'
+                  type='tel'
                   className={solidInput}
-                  placeholder='ejemplo@correo.com'
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={enviando}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className='row'>
-            <div className='col-lg-6 col-md-8'>
-              <div className='form-group'>
-                <label className='font-weight-bold'>Usuario</label>
-                <input
-                  type='text'
-                  className={solidInput}
-                  placeholder='Nombre de usuario'
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder='965 123 456'
+                  value={celular}
+                  onChange={(e) => setCelular(e.target.value.replace(/\D/g, ''))}
+                  maxLength={15}
                   required
                   disabled={enviando}
                 />
@@ -313,10 +326,143 @@ const Registration = () => {
           </div>
         </div>
 
-        {/* Acciones */}
-        <div className='d-flex flex-wrap justify-content-between align-items-center'>
+        {/* ── 3. Ubicación ── */}
+        <div className='mb-10'>
+          <h5 className='font-weight-bolder mb-4'>3) Ubicación</h5>
+
+          <div className='row'>
+            <div className='col-lg-4'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>Departamento</label>
+                <select
+                  className={solidInput}
+                  value={departamentoId}
+                  onChange={handleDepartamentoChange}
+                  disabled={cargandoDepartamentos || enviando}
+                  required
+                >
+                  <option value=''>
+                    {cargandoDepartamentos ? 'Cargando...' : 'Selecciona...'}
+                  </option>
+                  {departamentos.map((d) => (
+                    <option key={d.id} value={d.id}>{d.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className='col-lg-4'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>Provincia</label>
+                <select
+                  className={solidInput}
+                  value={provinciaId}
+                  onChange={handleProvinciaChange}
+                  disabled={!departamentoId || cargandoProvincias || enviando}
+                  required
+                >
+                  <option value=''>
+                    {cargandoProvincias ? 'Cargando...' : 'Selecciona...'}
+                  </option>
+                  {provincias.map((p) => (
+                    <option key={p.id} value={p.id}>{p.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className='col-lg-4'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>Distrito</label>
+                <select
+                  className={solidInput}
+                  value={distritoId}
+                  onChange={(e) => setDistritoId(e.target.value)}
+                  disabled={!provinciaId || cargandoDistritos || enviando}
+                  required
+                >
+                  <option value=''>
+                    {cargandoDistritos ? 'Cargando...' : 'Selecciona...'}
+                  </option>
+                  {distritos.map((d) => (
+                    <option key={d.id} value={d.id}>{d.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className='row'>
+            <div className='col-12'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>Dirección exacta</label>
+                <textarea
+                  className={solidInput}
+                  rows={2}
+                  placeholder='Calle, número, urbanización, referencia...'
+                  value={direccion}
+                  onChange={(e) => setDireccion(e.target.value)}
+                  required
+                  disabled={enviando}
+                  style={{resize: 'none'}}
+                />
+                <span className='form-text text-muted'>
+                  Ejemplo: Jr. Los Pinos 123, Urb. Las Flores, frente al parque
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 4. Datos de acceso ── */}
+        <div className='mb-10'>
+          <h5 className='font-weight-bolder mb-4'>4) Datos de acceso</h5>
+
+          <div className='row'>
+            <div className='col-lg-6'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>Correo electrónico</label>
+                <input
+                  type='email'
+                  className={solidInput}
+                  placeholder='ejemplo@correo.com'
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value.toLowerCase())}
+                  required
+                  disabled={enviando}
+                />
+                <span className='form-text text-muted'>
+                  Recibirás tu código de verificación aquí
+                </span>
+              </div>
+            </div>
+
+            <div className='col-lg-6'>
+              <div className='form-group'>
+                <label className='font-weight-bold'>Nombre de usuario</label>
+                <input
+                  type='text'
+                  className={solidInput}
+                  placeholder='Ej: pzambrano'
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ''))}
+                  minLength={4}
+                  maxLength={50}
+                  required
+                  disabled={enviando}
+                />
+                <span className='form-text text-muted'>
+                  Solo letras, números y guiones. Mín. 4 caracteres.
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Botones ── */}
+        <div className='d-flex flex-wrap justify-content-between align-items-center mt-5'>
           <Link to='/auth/login' className='text-muted text-hover-primary'>
-            Volver al inicio de sesión
+            ¿Ya tienes cuenta? Inicia sesión
           </Link>
 
           <button
