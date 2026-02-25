@@ -55,6 +55,7 @@ function Login(props) {
 
       if (loginAction) loginAction(access_token)
 
+      // ✅ ACTUALIZADO: Pasar TODOS los campos del usuario a Redux
       if (fulfillUser && user) {
         fulfillUser({
           id: user.id,
@@ -62,6 +63,11 @@ function Login(props) {
           email: user.email,
           fullname: user.nombre_completo,
           role: user.role,
+          role_id: user.role_id,  // ← AGREGADO
+          role_nivel: user.role_nivel,  // ← AGREGADO
+          perfil_completo: user.perfil_completo,  // ← AGREGADO
+          estado: user.estado,  // ← AGREGADO
+          numero_documento: user.numero_documento,  // ← AGREGADO
           pic: '/media/avatars/blank.png',
         })
       }

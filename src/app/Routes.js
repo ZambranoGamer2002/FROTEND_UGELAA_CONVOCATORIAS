@@ -12,6 +12,7 @@ import { Layout } from "../_metronic/layout";
 import BasePage from "./BasePage";
 import { Logout, AuthPage } from "./modules/Auth";
 import ErrorsPage from "./modules/ErrorsExamples/ErrorsPage";
+import CompletarPerfilPage from './pages/CompletarPerfilPage'
 
 export function Routes() {
   const { isAuthorized } = useSelector(
@@ -35,6 +36,16 @@ export function Routes() {
 
       <Route path="/error" component={ErrorsPage} />
       <Route path="/logout" component={Logout} />
+
+      {/* ========== AGREGAR ESTA RUTA AQUÍ ========== */}
+      {isAuthorized && (
+        <Route path="/completar-perfil" exact>
+          <Layout>
+            <CompletarPerfilPage />
+          </Layout>
+        </Route>
+      )}
+      {/* ========== FIN AGREGAR ========== */}
 
       {!isAuthorized ? (
         /*Redirect to `/auth` when user is not authorized*/
