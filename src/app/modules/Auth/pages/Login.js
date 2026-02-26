@@ -1,12 +1,12 @@
-import React, {useState} from 'react'
-import {useHistory, Link} from 'react-router-dom'
-import {connect} from 'react-redux'
-import {injectIntl} from 'react-intl'
+import React, { useState } from 'react'
+import { useHistory, Link } from 'react-router-dom'
+import { connect } from 'react-redux'
+import { injectIntl } from 'react-intl'
 import * as auth from '../_redux/authRedux'
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'
 
-const IconEye = ({show}) =>
+const IconEye = ({ show }) =>
   show ? (
     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
       <path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z' />
@@ -21,7 +21,7 @@ const IconEye = ({show}) =>
 
 function Login(props) {
   const history = useHistory()
-  const {login: loginAction, fulfillUser} = props
+  const { login: loginAction, fulfillUser } = props
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -37,8 +37,8 @@ function Login(props) {
     try {
       const resp = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({username, password}),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
       })
 
       const data = await resp.json().catch(() => ({}))
@@ -47,7 +47,7 @@ function Login(props) {
         throw new Error(data.detail || data.message || 'Credenciales incorrectas.')
       }
 
-      const {access_token, refresh_token, user} = data
+      const { access_token, refresh_token, user } = data
 
       localStorage.setItem('access_token', access_token)
       localStorage.setItem('refresh_token', refresh_token)
@@ -63,16 +63,16 @@ function Login(props) {
           email: user.email,
           fullname: user.nombre_completo,
           role: user.role,
-          role_id: user.role_id,  // ← AGREGADO
-          role_nivel: user.role_nivel,  // ← AGREGADO
-          perfil_completo: user.perfil_completo,  // ← AGREGADO
-          estado: user.estado,  // ← AGREGADO
-          numero_documento: user.numero_documento,  // ← AGREGADO
+          role_id: user.role_id,
+          role_nivel: user.role_nivel,
+          perfil_completo: user.perfil_completo,
+          estado: user.estado,
+          numero_documento: user.numero_documento,
           pic: '/media/avatars/blank.png',
         })
       }
 
-      setTimeout(() => history.push('/dashboard'), 100)
+      setTimeout(() => history.push('/mi-perfil'), 100)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -131,7 +131,7 @@ function Login(props) {
             type='button'
             className='btn btn-link position-absolute right-0 top-0 mt-3 mr-4'
             onClick={() => setShowPassword(!showPassword)}
-            style={{color: '#a1a5b7'}}
+            style={{ color: '#a1a5b7' }}
             tabIndex={-1}
             aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
           >

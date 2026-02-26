@@ -5,7 +5,7 @@ import { LayoutSplashScreen, ContentRoute } from "../_metronic/layout";
 import { BuilderPage } from "./pages/BuilderPage";
 import { MyPage } from "./pages/MyPage";
 import DashboardPage from './pages/DashboardPage';
-import CompletarPerfilPage from './pages/CompletarPerfilPage';
+import MiPerfilPage from './pages/MiPerfilPage';
 
 const GoogleMaterialPage = lazy(() =>
   import("./modules/GoogleMaterialExamples/GoogleMaterialPage")
@@ -25,40 +25,34 @@ export default function BasePage() {
   const auth = useSelector((state) => state.auth);
   const user = auth?.user || {};
 
-  // ========== VERIFICAR PERFIL COMPLETO ==========
+  // ========== VERIFICAR PERFIL Y REDIRIGIR ==========
   useEffect(() => {
-    // Esperar a que el usuario esté cargado
     if (!user || Object.keys(user).length === 0) {
-      console.log('⏳ BasePage: Esperando carga de usuario...');
       return;
     }
 
-    console.log('👤 BasePage - Usuario cargado:', user);
-    console.log('📊 perfil_completo:', user.perfil_completo);
-    console.log('🎭 role_nivel:', user.role_nivel);
-
-    const perfilCompleto = user.perfil_completo;
     const roleNivel = user.role_nivel;
     const currentPath = window.location.pathname;
 
-    // SOLO DOCENTES (nivel 5) sin perfil → redirigir a completar-perfil
-    if (roleNivel === 5 && perfilCompleto === false) {
-      // No redirigir si ya está en /completar-perfil
-      if (currentPath !== '/completar-perfil') {
-        console.log('🚀 BasePage: Redirigiendo a /completar-perfil');
-        history.push('/completar-perfil');
-      }
+    console.log('📍 BasePage - Ruta actual:', currentPath);
+    console.log('👤 Usuario:', user.username);
+    console.log('🎭 Rol nivel:', roleNivel);
+
+    // DOCENTES (nivel 5): Si no están en /mi-perfil, redirigir
+    if (roleNivel === 5 && currentPath === '/dashboard') {
+      console.log('🚀 BasePage: Redirigiendo docente a /mi-perfil desde /dashboard');
+      history.push('/mi-perfil');
     }
   }, [user, history]);
 
   return (
     <Suspense fallback={<LayoutSplashScreen />}>
       <Switch>
-        {/* Ruta de completar perfil */}
-        <ContentRoute path="/completar-perfil" component={CompletarPerfilPage} />
+        {/* Ruta de Mi Perfil */}
+        <ContentRoute path="/mi-perfil" component={MiPerfilPage} />
 
-        {/* Redirect from root URL to /dashboard */}
-        <Redirect exact from="/" to="/dashboard" />
+        {/* Redirect from root URL to /mi-perfil (TODOS LOS USUARIOS) */}
+        <Redirect exact from="/" to="/mi-perfil" />
 
         <ContentRoute path="/dashboard" component={DashboardPage} />
         <ContentRoute path="/builder" component={BuilderPage} />

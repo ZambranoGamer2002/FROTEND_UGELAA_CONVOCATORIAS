@@ -1,7 +1,8 @@
 /* eslint-disable jsx-a11y/anchor-is-valid */
 import React, { useState, useEffect } from 'react'
 import { useSelector } from 'react-redux'
-import { Link, useHistory } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import DocenteDashboard from './DocenteDashboard'
 
 const API_BASE = 'http://localhost:8000/api/v1'
 
@@ -36,7 +37,6 @@ function StatCard({ titulo, valor, subtitulo, color, icono }) {
 }
 
 export default function DashboardPage() {
-  const history = useHistory()
   const auth = useSelector((s) => s.auth)
   const token = auth?.authToken || ''
   const user = auth?.user || {}
@@ -45,36 +45,16 @@ export default function DashboardPage() {
   const [cargando, setCargando] = useState(true)
 
   const headers = { Authorization: `Bearer ${token}` }
+  const roleNivel = user?.role_nivel || 5
 
-  // ========== VERIFICAR PERFIL COMPLETO Y REDIRIGIR ==========
+  // ========== CARGAR ESTADÍSTICAS (SOLO PARA ADMINS) ==========
   useEffect(() => {
-    // Esperar a que user esté cargado
-    if (!user || Object.keys(user).length === 0) {
-      console.log('⏳ Esperando carga de usuario...')
+    // Si es docente, no cargar stats
+    if (roleNivel === 5 || !token) {
+      setCargando(false)
       return
     }
 
-    console.log('👤 Usuario cargado:', user)
-    console.log('📊 perfil_completo:', user.perfil_completo, typeof user.perfil_completo)
-    console.log('🎭 role_nivel:', user.role_nivel, typeof user.role_nivel)
-
-    const perfilCompleto = user.perfil_completo
-    const roleNivel = user.role_nivel
-
-    // SOLO DOCENTES (nivel 5) sin perfil → redirigir directamente
-    if (roleNivel === 5 && perfilCompleto === false) {
-      console.log('🚀 REDIRIGIENDO docente sin perfil a /completar-perfil')
-      history.push('/completar-perfil')
-    } else {
-      console.log('✅ Usuario autorizado para ver Dashboard')
-      console.log('   - Es nivel 5?', roleNivel === 5)
-      console.log('   - Perfil incompleto?', perfilCompleto === false)
-    }
-  }, [user, history])
-
-  // ========== CARGAR ESTADÍSTICAS ==========
-  useEffect(() => {
-    if (!token) return
     const cargar = async () => {
       try {
         const resp = await fetch(`${API_BASE}/dashboard/stats`, { headers })
@@ -90,12 +70,18 @@ export default function DashboardPage() {
     }
     cargar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token])
+  }, [token, roleNivel])
+
+  // ========== SI ES DOCENTE, MOSTRAR DASHBOARD DE DOCENTE ==========
+  if (roleNivel === 5) {
+    return <DocenteDashboard />
+  }
 
   const hora = new Date().getHours()
   const saludo = hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches'
   const nombreUsuario = user?.fullname || user?.firstname || 'Usuario'
 
+  // ========== DASHBOARD PARA ADMINISTRADORES ==========
   return (
     <div className='container-fluid px-0'>
 
@@ -111,7 +97,7 @@ export default function DashboardPage() {
                 {saludo}, {nombreUsuario.split(' ')[0]}
               </h2>
               <p className='text-white opacity-70 mb-0'>
-                Bienvenido al Sistema de Contratación Docente — UGELAA
+                Panel de Administración — UGELAA
               </p>
             </div>
             <div className='text-right d-none d-md-block'>
@@ -178,7 +164,6 @@ export default function DashboardPage() {
                       ? Math.round((r.total / stats.usuarios.total) * 100)
                       : 0
 
-                    // Iconos por rol
                     const iconoRol = {
                       1: 'fa-crown',
                       2: 'fa-user-shield',
@@ -223,12 +208,12 @@ export default function DashboardPage() {
                 <div className='card-body pt-2'>
                   <div className='row'>
                     {[
-                      { to: '/usuarios', icono: 'fa-users', titulo: 'Gestión de Usuarios', desc: 'Administrar cuentas y roles', color: '#3699FF' },
-                      { to: '/convocatorias', icono: 'fa-bullhorn', titulo: 'Convocatorias', desc: 'Crear y gestionar convocatorias', color: '#FFA800' },
-                      { to: '/postulaciones', icono: 'fa-file-alt', titulo: 'Postulaciones', desc: 'Revisar expedientes', color: '#1BC5BD' },
-                      { to: '/reportes', icono: 'fa-chart-bar', titulo: 'Reportes', desc: 'Ver estadísticas e informes', color: '#F64E60' },
-                      { to: '/configuracion', icono: 'fa-cog', titulo: 'Configuración', desc: 'Ajustes del sistema', color: '#8950FC' },
-                      { to: '/seguridad', icono: 'fa-shield-alt', titulo: 'Seguridad', desc: 'Roles y permisos', color: '#1e3a5f' },
+                      { to: '/usuarios', icono: 'fa-users', titulo: 'Gestión de Usuarios', color: '#3699FF' },
+                      { to: '/convocatorias', icono: 'fa-bullhorn', titulo: 'Convocatorias', color: '#FFA800' },
+                      { to: '/postulaciones', icono: 'fa-file-alt', titulo: 'Postulaciones', color: '#1BC5BD' },
+                      { to: '/reportes', icono: 'fa-chart-bar', titulo: 'Reportes', color: '#F64E60' },
+                      { to: '/configuracion', icono: 'fa-cog', titulo: 'Configuración', color: '#8950FC' },
+                      { to: '/seguridad', icono: 'fa-shield-alt', titulo: 'Seguridad', color: '#1e3a5f' },
                     ].map((item) => (
                       <div key={item.to} className='col-md-4 mb-4'>
                         <Link
