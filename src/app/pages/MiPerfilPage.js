@@ -475,7 +475,7 @@ export default function MiPerfilPage() {
                                         <strong>DNI Cargado:</strong> Ya tienes un documento de identidad registrado.
                                         {' '}
                                         <a
-                                            href={`${API_BASE.replace('/api/v1', '')}/storage/${documentoDNIUrl}`}
+                                            href={`http://localhost:8000/storage/${documentoDNIUrl}?v=${Date.now()}`}
                                             target='_blank'
                                             rel='noopener noreferrer'
                                             className='font-weight-bold'
