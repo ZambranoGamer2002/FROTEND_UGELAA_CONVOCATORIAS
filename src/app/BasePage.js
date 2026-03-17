@@ -6,6 +6,8 @@ import { BuilderPage } from "./pages/BuilderPage";
 import { MyPage } from "./pages/MyPage";
 import DashboardPage from './pages/DashboardPage';
 import MiPerfilPage from './pages/MiPerfilPage';
+import ConvocatoriasPage from './pages/ConvocatoriasPage';
+import ConvocatoriasPublicasPage from './pages/ConvocatoriasPublicasPage';
 
 const GoogleMaterialPage = lazy(() =>
   import("./modules/GoogleMaterialExamples/GoogleMaterialPage")
@@ -24,6 +26,7 @@ export default function BasePage() {
   const history = useHistory();
   const auth = useSelector((state) => state.auth);
   const user = auth?.user || {};
+  const roleNivel = user.role_nivel || 5;
 
   // ========== VERIFICAR PERFIL Y REDIRIGIR ==========
   useEffect(() => {
@@ -31,7 +34,6 @@ export default function BasePage() {
       return;
     }
 
-    const roleNivel = user.role_nivel;
     const currentPath = window.location.pathname;
 
     console.log('📍 BasePage - Ruta actual:', currentPath);
@@ -43,18 +45,46 @@ export default function BasePage() {
       console.log('🚀 BasePage: Redirigiendo docente a /mi-perfil desde /dashboard');
       history.push('/mi-perfil');
     }
-  }, [user, history]);
+  }, [user, history, roleNivel]);
 
   return (
     <Suspense fallback={<LayoutSplashScreen />}>
       <Switch>
-        {/* Ruta de Mi Perfil */}
+        {/* Ruta de Mi Perfil - TODOS */}
         <ContentRoute path="/mi-perfil" component={MiPerfilPage} />
 
         {/* Redirect from root URL to /mi-perfil (TODOS LOS USUARIOS) */}
         <Redirect exact from="/" to="/mi-perfil" />
 
+        {/* Dashboard - TODOS */}
         <ContentRoute path="/dashboard" component={DashboardPage} />
+
+        {/* ══════════════════════════════════════════════════════ */}
+        {/* CONVOCATORIAS - DIFERENCIADO POR ROL */}
+        {/* ══════════════════════════════════════════════════════ */}
+
+        {/* Admin (niveles 1-2): Gestión completa */}
+        <Route
+          path="/convocatorias"
+          exact
+          render={(props) => {
+            if (roleNivel === 1 || roleNivel === 2) {
+              return <ConvocatoriasPage {...props} />;
+            } else {
+              // Docentes no pueden acceder a gestión
+              return <Redirect to="/convocatorias/publicas" />;
+            }
+          }}
+        />
+
+        {/* Docentes (nivel 5): Solo ver públicas */}
+        <Route
+          path="/convocatorias/publicas"
+          component={ConvocatoriasPublicasPage}
+        />
+
+        {/* ══════════════════════════════════════════════════════ */}
+
         <ContentRoute path="/builder" component={BuilderPage} />
         <ContentRoute path="/my-page" component={MyPage} />
         <Route path="/google-material" component={GoogleMaterialPage} />

@@ -1,0 +1,6 @@
+Listado de rutas de carpetas para el volumen OS
+El número de serie del volumen es 6044-581B
+C:\USERS\PEDRO ZAMBRANO\DOCUMENTS\UGELAA\PROYECTO_UGELAA\FRONTEND\FRONTEND\SRC\_METRONIC
+Ruta de acceso no válida: \USERS\PEDRO ZAMBRANO\DOCUMENTS\UGELAA\PROYECTO_UGELAA\FRONTEND\FRONTEND\SRC\_METRONIC
+No existe ninguna subcarpeta 
+
