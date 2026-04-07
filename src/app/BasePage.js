@@ -4,10 +4,11 @@ import { useSelector } from "react-redux";
 import { LayoutSplashScreen, ContentRoute } from "../_metronic/layout";
 import { BuilderPage } from "./pages/BuilderPage";
 import { MyPage } from "./pages/MyPage";
-import DashboardPage from './pages/DashboardPage';
-import MiPerfilPage from './pages/MiPerfilPage';
-import ConvocatoriasPage from './pages/ConvocatoriasPage';
-import ConvocatoriasPublicasPage from './pages/ConvocatoriasPublicasPage';
+import DashboardPage from "./pages/DashboardPage";
+import MiPerfilPage from "./pages/MiPerfilPage";
+import ConvocatoriasPage from "./pages/ConvocatoriasPage";
+import ConvocatoriasPublicasPage from "./pages/ConvocatoriasPublicasPage";
+import SeleccionPlazaPage from "./pages/SeleccionPlazaPage";
 
 const GoogleMaterialPage = lazy(() =>
   import("./modules/GoogleMaterialExamples/GoogleMaterialPage")
@@ -26,9 +27,8 @@ export default function BasePage() {
   const history = useHistory();
   const auth = useSelector((state) => state.auth);
   const user = auth?.user || {};
-  const roleNivel = user.role_nivel || 5;
+  const roleNivel = user?.role_nivel || 5;
 
-  // ========== VERIFICAR PERFIL Y REDIRIGIR ==========
   useEffect(() => {
     if (!user || Object.keys(user).length === 0) {
       return;
@@ -36,54 +36,50 @@ export default function BasePage() {
 
     const currentPath = window.location.pathname;
 
-    console.log('📍 BasePage - Ruta actual:', currentPath);
-    console.log('👤 Usuario:', user.username);
-    console.log('🎭 Rol nivel:', roleNivel);
+    console.log("📍 BasePage - Ruta actual:", currentPath);
+    console.log("👤 Usuario:", user.username);
+    console.log("🎭 Rol nivel:", roleNivel);
 
-    // DOCENTES (nivel 5): Si no están en /mi-perfil, redirigir
-    if (roleNivel === 5 && currentPath === '/dashboard') {
-      console.log('🚀 BasePage: Redirigiendo docente a /mi-perfil desde /dashboard');
-      history.push('/mi-perfil');
+    // Docente: si entra al dashboard, llevarlo a convocatorias públicas
+    if (roleNivel === 5 && currentPath === "/dashboard") {
+      console.log("🚀 BasePage: Redirigiendo docente a /convocatorias/publicas");
+      history.push("/convocatorias/publicas");
     }
   }, [user, history, roleNivel]);
 
   return (
     <Suspense fallback={<LayoutSplashScreen />}>
       <Switch>
-        {/* Ruta de Mi Perfil - TODOS */}
+        {/* Mi Perfil */}
         <ContentRoute path="/mi-perfil" component={MiPerfilPage} />
 
-        {/* Redirect from root URL to /mi-perfil (TODOS LOS USUARIOS) */}
+        {/* Inicio */}
         <Redirect exact from="/" to="/mi-perfil" />
 
-        {/* Dashboard - TODOS */}
+        {/* Dashboard */}
         <ContentRoute path="/dashboard" component={DashboardPage} />
 
-        {/* ══════════════════════════════════════════════════════ */}
-        {/* CONVOCATORIAS - DIFERENCIADO POR ROL */}
-        {/* ══════════════════════════════════════════════════════ */}
+        {/* Selección de Plaza */}
+        <ContentRoute path="/seleccion-plaza" component={SeleccionPlazaPage} />
 
-        {/* Admin (niveles 1-2): Gestión completa */}
+        {/* Convocatorias - Gestión admin */}
         <Route
           path="/convocatorias"
           exact
           render={(props) => {
             if (roleNivel === 1 || roleNivel === 2) {
               return <ConvocatoriasPage {...props} />;
-            } else {
-              // Docentes no pueden acceder a gestión
-              return <Redirect to="/convocatorias/publicas" />;
             }
+
+            return <Redirect to="/convocatorias/publicas" />;
           }}
         />
 
-        {/* Docentes (nivel 5): Solo ver públicas */}
+        {/* Convocatorias públicas - docentes */}
         <Route
           path="/convocatorias/publicas"
           component={ConvocatoriasPublicasPage}
         />
-
-        {/* ══════════════════════════════════════════════════════ */}
 
         <ContentRoute path="/builder" component={BuilderPage} />
         <ContentRoute path="/my-page" component={MyPage} />
@@ -91,7 +87,9 @@ export default function BasePage() {
         <Route path="/react-bootstrap" component={ReactBootstrapPage} />
         <Route path="/e-commerce" component={ECommercePage} />
         <Route path="/user-profile" component={UserProfilepage} />
-        <Redirect to="error/error-v1" />
+
+        {/* Página de error si la ruta no existe */}
+        <Redirect to="/error/error-v1" />
       </Switch>
     </Suspense>
   );

@@ -57,7 +57,7 @@ export default function DocenteDashboard() {
                 </div>
 
                 <div className='col-lg-4 col-md-6 mb-5'>
-                    <Link to='/mis-postulaciones' className='text-decoration-none'>
+                    <Link to='/postulaciones' className='text-decoration-none'>
                         <div className='card card-custom card-stretch gutter-b'>
                             <div className='card-body text-center py-10'>
                                 <i className='fas fa-file-alt' style={{ fontSize: 48, color: '#1BC5BD' }} />

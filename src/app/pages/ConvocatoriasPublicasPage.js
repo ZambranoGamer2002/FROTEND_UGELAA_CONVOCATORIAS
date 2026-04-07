@@ -54,7 +54,7 @@ const ConvocatoriasPublicasPage = () => {
 
     const handlePostular = () => {
         if (convocatoria) {
-            history.push(`/convocatorias/${convocatoria.id}/postular`)
+            history.push('/seleccion-plaza');
         }
     }
 

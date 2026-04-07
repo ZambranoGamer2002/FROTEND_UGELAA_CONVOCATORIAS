@@ -208,14 +208,12 @@ export function AsideMenuList({ layoutProps }) {
           </>
         )}
 
-        {tieneAcceso('postulaciones') && (
-          <li className={`menu-item ${getMenuItemActive('/postulaciones', false)}`} aria-haspopup='true'>
-            <NavLink className='menu-link' to='/postulaciones'>
-              <span className='svg-icon menu-icon'>{ICONOS.postulaciones}</span>
-              <span className='menu-text'>Postulaciones / Expedientes</span>
-            </NavLink>
-          </li>
-        )}
+        <li className={`menu-item ${getMenuItemActive('/seleccion-plaza', false)}`} aria-haspopup='true'>
+          <NavLink className='menu-link' to='/seleccion-plaza'>
+            <span className='svg-icon menu-icon'>{ICONOS.postulaciones}</span>
+            <span className='menu-text'>Selección de Plaza</span>
+          </NavLink>
+        </li>
 
         {/* ── ANÁLISIS ── */}
         {tieneAcceso('reportes') && (
@@ -265,9 +263,9 @@ export function AsideMenuList({ layoutProps }) {
             <div className='px-5 pb-2 w-100'>
               <span
                 className={`badge badge-pill w-100 py-2 ${roleInfo.nivel === 1 ? 'badge-danger' :
-                    roleInfo.nivel === 2 ? 'badge-warning' :
-                      roleInfo.nivel === 3 ? 'badge-info' :
-                        'badge-success'
+                  roleInfo.nivel === 2 ? 'badge-warning' :
+                    roleInfo.nivel === 3 ? 'badge-info' :
+                      'badge-success'
                   }`}
                 style={{ fontSize: '11px', letterSpacing: '0.5px' }}
               >
