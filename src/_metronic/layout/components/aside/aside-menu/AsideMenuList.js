@@ -186,7 +186,6 @@ export function AsideMenuList({ layoutProps }) {
         {/* CONVOCATORIAS - Diferenciado por rol */}
         {tieneAcceso('convocatorias') && (
           <>
-            {/* Admin (niveles 1-2): Gestión completa */}
             {(roleNivel === 1 || roleNivel === 2) && (
               <li className={`menu-item ${getMenuItemActive('/convocatorias', false)}`} aria-haspopup='true'>
                 <NavLink className='menu-link' to='/convocatorias'>
@@ -196,7 +195,6 @@ export function AsideMenuList({ layoutProps }) {
               </li>
             )}
 
-            {/* Docentes (nivel 5): Solo ver públicas */}
             {roleNivel === 5 && (
               <li className={`menu-item ${getMenuItemActive('/convocatorias/publicas', false)}`} aria-haspopup='true'>
                 <NavLink className='menu-link' to='/convocatorias/publicas'>
@@ -206,6 +204,21 @@ export function AsideMenuList({ layoutProps }) {
               </li>
             )}
           </>
+        )}
+
+        {/* ── NUEVO: Notas Bilingüe — solo Admin/SuperAdmin ── */}
+        {(roleNivel === 1 || roleNivel === 2) && (
+          <li className={`menu-item ${getMenuItemActive('/admin/bilingue/notas', false)}`} aria-haspopup='true'>
+            <NavLink className='menu-link' to='/admin/bilingue/notas'>
+              <span className='svg-icon menu-icon'>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path opacity="0.3" d="M2 12C2 7.02944 6.02944 3 11 3H13C17.9706 3 22 7.02944 22 12C22 16.9706 17.9706 21 13 21H11C6.02944 21 2 16.9706 2 12Z" fill="#335EEA" />
+                  <path d="M7 12H17M14 9L17 12L14 15" stroke="#335EEA" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <span className='menu-text'>Notas Bilingüe</span>
+            </NavLink>
+          </li>
         )}
 
         <li className={`menu-item ${getMenuItemActive('/seleccion-plaza', false)}`} aria-haspopup='true'>

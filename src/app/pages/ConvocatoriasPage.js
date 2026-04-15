@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { useSelector } from 'react-redux'
 import Swal from 'sweetalert2'
+import { useHistory } from 'react-router-dom'
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'
 
 const ConvocatoriasPage = () => {
   // Obtener token desde Redux
+  const history = useHistory()
   const auth = useSelector((state) => state.auth)
   const token = auth?.authToken || auth?.accessToken || localStorage.getItem('token')
 
@@ -324,6 +326,15 @@ const ConvocatoriasPage = () => {
                         </span>
                       </td>
                       <td className='text-right'>
+                        {conv.estado === 'PUBLICADA' && (
+                          <button
+                            className='btn btn-sm btn-primary mr-2'
+                            onClick={() => history.push(`/seleccion-plaza?convocatoria_id=${conv.id}`)}
+                          >
+                            <i className='fas fa-graduation-cap mr-1' />
+                            Postular
+                          </button>
+                        )}
                         {conv.estado === 'BORRADOR' && (
                           <>
                             <button
