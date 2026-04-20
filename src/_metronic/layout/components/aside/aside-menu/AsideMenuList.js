@@ -42,6 +42,24 @@ const ICONOS = {
       <path d="M8 17V13M12 17V9M16 17V11" stroke="#335EEA" strokeWidth="2" strokeLinecap="round" />
     </svg>
   ),
+  reportesConv: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <path d="M3 6C3 4.89543 3.89543 4 5 4H19C20.1046 4 21 4.89543 21 6V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V6Z" fill="#335EEA" opacity="0.3" />
+      <path d="M8 15V11M12 15V9M16 15V12" stroke="#335EEA" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  ),
+  nuevaConv: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <path d="M3 6C3 4.89543 3.89543 4 5 4H19C20.1046 4 21 4.89543 21 6V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V6Z" fill="#335EEA" opacity="0.3" />
+      <path d="M12 9V15M9 12H15" stroke="#335EEA" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  ),
+  bilingue: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <path opacity="0.3" d="M2 12C2 7.02944 6.02944 3 11 3H13C17.9706 3 22 7.02944 22 12C22 16.9706 17.9706 21 13 21H11C6.02944 21 2 16.9706 2 12Z" fill="#335EEA" />
+      <path d="M7 12H17M14 9L17 12L14 15" stroke="#335EEA" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
   configuracion: (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
       <path fillRule="evenodd" clipRule="evenodd" d="M12 8C9.79086 8 8 9.79086 8 12C8 14.2091 9.79086 16 12 16C14.2091 16 16 14.2091 16 12C16 9.79086 14.2091 8 12 8Z" fill="#335EEA" />
@@ -72,11 +90,7 @@ export function AsideMenuList({ layoutProps }) {
 
   const getToken = () => {
     if (!auth) return null
-    return auth.authToken
-      || auth.accessToken
-      || auth.token
-      || auth.access_token
-      || null
+    return auth.authToken || auth.accessToken || auth.token || auth.access_token || null
   }
 
   useEffect(() => {
@@ -142,14 +156,23 @@ export function AsideMenuList({ layoutProps }) {
     )
   }
 
-  // Determinar nivel del rol
+  // Nivel del rol: 1=SuperAdmin, 2=Admin, 3=Recepción, 4=Aux, 5=Docente
   const roleNivel = roleInfo?.nivel || 5
+
+  // ── Helpers de visibilidad por sección ──────────────────────────────
+  const esSuperAdmin = roleNivel === 1
+  const esAdmin = roleNivel === 2
+  const esRecepcion = roleNivel === 3
+  const esDocente = roleNivel === 5
+  const esStaff = roleNivel <= 3   // SuperAdmin + Admin + Recepción
 
   return (
     <>
       <ul className={`menu-nav ${layoutProps.ulClasses}`}>
 
-        {/* ── PRINCIPAL ── */}
+        {/* ════════════════════════════════════════
+            SECCIÓN: PRINCIPAL
+        ════════════════════════════════════════ */}
         <li className='menu-section mt-2'>
           <h4 className='menu-text'>Principal</h4>
           <i className='menu-icon flaticon-more-v2'></i>
@@ -166,7 +189,11 @@ export function AsideMenuList({ layoutProps }) {
           </NavLink>
         </li>
 
-        {/* ── GESTIÓN ── */}
+        {/* ════════════════════════════════════════
+            SECCIÓN: GESTIÓN
+            Visible si tiene acceso a usuarios,
+            convocatorias o postulaciones
+        ════════════════════════════════════════ */}
         {(tieneAcceso('usuarios') || tieneAcceso('convocatorias') || tieneAcceso('postulaciones')) && (
           <li className='menu-section mt-2'>
             <h4 className='menu-text'>Gestión</h4>
@@ -174,8 +201,12 @@ export function AsideMenuList({ layoutProps }) {
           </li>
         )}
 
-        {tieneAcceso('usuarios') && (
-          <li className={`menu-item ${getMenuItemActive('/usuarios', false)}`} aria-haspopup='true'>
+        {/* ── Gestión de Usuarios — solo niveles 1 y 2 ── */}
+        {tieneAcceso('usuarios') && (esSuperAdmin || esAdmin) && (
+          <li
+            className={`menu-item ${getMenuItemActive('/usuarios', false)}`}
+            aria-haspopup='true'
+          >
             <NavLink className='menu-link' to='/usuarios'>
               <span className='svg-icon menu-icon'>{ICONOS.usuarios}</span>
               <span className='menu-text'>Gestión de Usuarios</span>
@@ -183,68 +214,142 @@ export function AsideMenuList({ layoutProps }) {
           </li>
         )}
 
-        {/* CONVOCATORIAS - Diferenciado por rol */}
-        {tieneAcceso('convocatorias') && (
-          <>
-            {(roleNivel === 1 || roleNivel === 2) && (
-              <li className={`menu-item ${getMenuItemActive('/convocatorias', false)}`} aria-haspopup='true'>
-                <NavLink className='menu-link' to='/convocatorias'>
-                  <span className='svg-icon menu-icon'>{ICONOS.convocatorias}</span>
-                  <span className='menu-text'>Convocatorias</span>
-                </NavLink>
-              </li>
-            )}
-
-            {roleNivel === 5 && (
-              <li className={`menu-item ${getMenuItemActive('/convocatorias/publicas', false)}`} aria-haspopup='true'>
-                <NavLink className='menu-link' to='/convocatorias/publicas'>
-                  <span className='svg-icon menu-icon'>{ICONOS.convocatorias}</span>
-                  <span className='menu-text'>Convocatorias Disponibles</span>
-                </NavLink>
-              </li>
-            )}
-          </>
+        {/* ── Convocatorias (Admin/SuperAdmin) — vista de gestión ── */}
+        {tieneAcceso('convocatorias') && esStaff && (
+          <li
+            className={`menu-item ${getMenuItemActive('/convocatorias', false)}`}
+            aria-haspopup='true'
+          >
+            <NavLink className='menu-link' to='/convocatorias'>
+              <span className='svg-icon menu-icon'>{ICONOS.convocatorias}</span>
+              <span className='menu-text'>Convocatorias</span>
+            </NavLink>
+          </li>
         )}
 
-        {/* ── NUEVO: Notas Bilingüe — solo Admin/SuperAdmin ── */}
-        {(roleNivel === 1 || roleNivel === 2) && (
-          <li className={`menu-item ${getMenuItemActive('/admin/bilingue/notas', false)}`} aria-haspopup='true'>
-            <NavLink className='menu-link' to='/admin/bilingue/notas'>
-              <span className='svg-icon menu-icon'>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path opacity="0.3" d="M2 12C2 7.02944 6.02944 3 11 3H13C17.9706 3 22 7.02944 22 12C22 16.9706 17.9706 21 13 21H11C6.02944 21 2 16.9706 2 12Z" fill="#335EEA" />
-                  <path d="M7 12H17M14 9L17 12L14 15" stroke="#335EEA" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+        {/* ── Nueva Convocatoria — EXCLUSIVO SuperAdmin (nivel 1) ── */}
+        {esSuperAdmin && tieneAcceso('convocatorias') && (
+          <li
+            className={`menu-item ${getMenuItemActive('/crear-convocatoria', false)}`}
+            aria-haspopup='true'
+          >
+            <NavLink className='menu-link' to='/crear-convocatoria'>
+              <span className='svg-icon menu-icon'>{ICONOS.nuevaConv}</span>
+              <span className='menu-text'>Nueva Convocatoria</span>
+              <span
+                className='menu-label'
+                style={{ marginLeft: 'auto' }}
+              >
+                <span
+                  className='label label-inline label-sm font-weight-bold'
+                  style={{ background: '#E8FFF3', color: '#1BC5BD', fontSize: 10 }}
+                >
+                  SUPER
+                </span>
               </span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* ── Convocatorias Disponibles — SOLO Docente (nivel 5) ── */}
+        {tieneAcceso('convocatorias') && esDocente && (
+          <li
+            className={`menu-item ${getMenuItemActive('/convocatorias/publicas', false)}`}
+            aria-haspopup='true'
+          >
+            <NavLink className='menu-link' to='/convocatorias/publicas'>
+              <span className='svg-icon menu-icon'>{ICONOS.convocatorias}</span>
+              <span className='menu-text'>Convocatorias Disponibles</span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* ── Notas Bilingüe — solo Admin y SuperAdmin ── */}
+        {(esSuperAdmin || esAdmin) && (
+          <li
+            className={`menu-item ${getMenuItemActive('/admin/bilingue/notas', false)}`}
+            aria-haspopup='true'
+          >
+            <NavLink className='menu-link' to='/admin/bilingue/notas'>
+              <span className='svg-icon menu-icon'>{ICONOS.bilingue}</span>
               <span className='menu-text'>Notas Bilingüe</span>
             </NavLink>
           </li>
         )}
 
-        <li className={`menu-item ${getMenuItemActive('/seleccion-plaza', false)}`} aria-haspopup='true'>
-          <NavLink className='menu-link' to='/seleccion-plaza'>
-            <span className='svg-icon menu-icon'>{ICONOS.postulaciones}</span>
-            <span className='menu-text'>Selección de Plaza</span>
-          </NavLink>
-        </li>
-
-        {/* ── ANÁLISIS ── */}
-        {tieneAcceso('reportes') && (
-          <>
-            <li className='menu-section mt-2'>
-              <h4 className='menu-text'>Análisis</h4>
-              <i className='menu-icon flaticon-more-v2'></i>
-            </li>
-            <li className={`menu-item ${getMenuItemActive('/reportes', false)}`} aria-haspopup='true'>
-              <NavLink className='menu-link' to='/reportes'>
-                <span className='svg-icon menu-icon'>{ICONOS.reportes}</span>
-                <span className='menu-text'>Reportes</span>
-              </NavLink>
-            </li>
-          </>
+        {/* ── Selección de Plaza — solo Docente (nivel 5) ── */}
+        {esDocente && (
+          <li
+            className={`menu-item ${getMenuItemActive('/seleccion-plaza', false)}`}
+            aria-haspopup='true'
+          >
+            <NavLink className='menu-link' to='/seleccion-plaza'>
+              <span className='svg-icon menu-icon'>{ICONOS.postulaciones}</span>
+              <span className='menu-text'>Selección de Plaza</span>
+            </NavLink>
+          </li>
         )}
 
-        {/* ── SISTEMA ── */}
+        {/* ── Mis Postulaciones — SOLO Docente (nivel 5) ── */}
+        {esDocente && (
+          <li
+            className={`menu-item ${getMenuItemActive('/mis-postulaciones', false)}`}
+            aria-haspopup='true'
+          >
+            <NavLink className='menu-link' to='/mis-postulaciones'>
+              <span className='svg-icon menu-icon'>
+                {/* Ícono carpeta/historial */}
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path opacity="0.3" d="M3 6C3 4.89543 3.89543 4 5 4H9L11 6H19C20.1046 6 21 6.89543 21 8V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V6Z" fill="#335EEA" />
+                  <path d="M9 13H15M9 16H12" stroke="#335EEA" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </span>
+              <span className='menu-text'>Mis Postulaciones</span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* ════════════════════════════════════════
+            SECCIÓN: ANÁLISIS
+            Visible para niveles 1, 2 y 3
+        ════════════════════════════════════════ */}
+        {esStaff && (tieneAcceso('reportes') || tieneAcceso('convocatorias')) && (
+          <li className='menu-section mt-2'>
+            <h4 className='menu-text'>Análisis</h4>
+            <i className='menu-icon flaticon-more-v2'></i>
+          </li>
+        )}
+
+        {/* ── Reportes de Convocatorias — niveles 1, 2 y 3 ── */}
+        {esStaff && tieneAcceso('convocatorias') && (
+          <li
+            className={`menu-item ${getMenuItemActive('/reportes/convocatorias', false)}`}
+            aria-haspopup='true'
+          >
+            <NavLink className='menu-link' to='/reportes/convocatorias'>
+              <span className='svg-icon menu-icon'>{ICONOS.reportesConv}</span>
+              <span className='menu-text'>Reportes Convocatorias</span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* ── Reportes generales ── */}
+        {tieneAcceso('reportes') && esStaff && (
+          <li
+            className={`menu-item ${getMenuItemActive('/reportes', false)}`}
+            aria-haspopup='true'
+          >
+            <NavLink className='menu-link' to='/reportes'>
+              <span className='svg-icon menu-icon'>{ICONOS.reportes}</span>
+              <span className='menu-text'>Reportes</span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* ════════════════════════════════════════
+            SECCIÓN: SISTEMA
+            Visible si tiene acceso a config o seguridad
+        ════════════════════════════════════════ */}
         {(tieneAcceso('configuracion') || tieneAcceso('seguridad')) && (
           <li className='menu-section mt-2'>
             <h4 className='menu-text'>Sistema</h4>
@@ -253,7 +358,10 @@ export function AsideMenuList({ layoutProps }) {
         )}
 
         {tieneAcceso('configuracion') && (
-          <li className={`menu-item ${getMenuItemActive('/configuracion', false)}`} aria-haspopup='true'>
+          <li
+            className={`menu-item ${getMenuItemActive('/configuracion', false)}`}
+            aria-haspopup='true'
+          >
             <NavLink className='menu-link' to='/configuracion'>
               <span className='svg-icon menu-icon'>{ICONOS.configuracion}</span>
               <span className='menu-text'>Configuración</span>
@@ -262,7 +370,10 @@ export function AsideMenuList({ layoutProps }) {
         )}
 
         {tieneAcceso('seguridad') && (
-          <li className={`menu-item ${getMenuItemActive('/seguridad', false)}`} aria-haspopup='true'>
+          <li
+            className={`menu-item ${getMenuItemActive('/seguridad', false)}`}
+            aria-haspopup='true'
+          >
             <NavLink className='menu-link' to='/seguridad'>
               <span className='svg-icon menu-icon'>{ICONOS.seguridad}</span>
               <span className='menu-text'>Seguridad</span>
@@ -270,22 +381,25 @@ export function AsideMenuList({ layoutProps }) {
           </li>
         )}
 
-        {/* ── Badge de rol ── */}
+        {/* ════════════════════════════════════════
+            BADGE DE ROL — al fondo del menú
+        ════════════════════════════════════════ */}
         {roleInfo && (
           <li className='menu-section mt-4'>
             <div className='px-5 pb-2 w-100'>
               <span
-                className={`badge badge-pill w-100 py-2 ${roleInfo.nivel === 1 ? 'badge-danger' :
-                  roleInfo.nivel === 2 ? 'badge-warning' :
-                    roleInfo.nivel === 3 ? 'badge-info' :
+                className={`badge badge-pill w-100 py-2 ${roleNivel === 1 ? 'badge-danger' :
+                  roleNivel === 2 ? 'badge-warning' :
+                    roleNivel === 3 ? 'badge-info' :
                       'badge-success'
                   }`}
                 style={{ fontSize: '11px', letterSpacing: '0.5px' }}
               >
-                {roleInfo.nivel === 1 && '👑 '}
-                {roleInfo.nivel === 2 && '🔧 '}
-                {roleInfo.nivel === 3 && '📋 '}
-                {roleInfo.nivel === 4 && '👤 '}
+                {roleNivel === 1 && '👑 '}
+                {roleNivel === 2 && '🔧 '}
+                {roleNivel === 3 && '📋 '}
+                {roleNivel === 4 && '👤 '}
+                {roleNivel === 5 && '🎓 '}
                 {roleInfo.nombre}
               </span>
             </div>

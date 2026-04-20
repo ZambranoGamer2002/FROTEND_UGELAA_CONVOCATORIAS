@@ -9,6 +9,11 @@ import MiPerfilPage from "./pages/MiPerfilPage";
 import ConvocatoriasPage from "./pages/ConvocatoriasPage";
 import ConvocatoriasPublicasPage from "./pages/ConvocatoriasPublicasPage";
 import SeleccionPlazaPage from "./pages/SeleccionPlazaPage";
+import MisPostulacionesPage from "./pages/MisPostulacionesPage"; // ← NUEVO
+
+import ReportesConvocatoriaPage from './pages/ReportesConvocatoriaPage'
+import GestionUsuarios from './pages/GestionUsuarios'
+import CrearConvocatoriaPage from './pages/CrearConvocatoriaPage'
 
 const GoogleMaterialPage = lazy(() =>
   import("./modules/GoogleMaterialExamples/GoogleMaterialPage")
@@ -36,10 +41,6 @@ export default function BasePage() {
 
     const currentPath = window.location.pathname;
 
-    console.log("📍 BasePage - Ruta actual:", currentPath);
-    console.log("👤 Usuario:", user.username);
-    console.log("🎭 Rol nivel:", roleNivel);
-
     // Docente: si entra al dashboard, llevarlo a convocatorias públicas
     if (roleNivel === 5 && currentPath === "/dashboard") {
       console.log("🚀 BasePage: Redirigiendo docente a /convocatorias/publicas");
@@ -62,6 +63,9 @@ export default function BasePage() {
         {/* Selección de Plaza */}
         <ContentRoute path="/seleccion-plaza" component={SeleccionPlazaPage} />
 
+        {/* ── NUEVO: Mis Postulaciones — solo docentes ── */}
+        <ContentRoute path="/mis-postulaciones" component={MisPostulacionesPage} />
+
         {/* Convocatorias - Gestión admin */}
         <Route
           path="/convocatorias"
@@ -70,7 +74,6 @@ export default function BasePage() {
             if (roleNivel === 1 || roleNivel === 2) {
               return <ConvocatoriasPage {...props} />;
             }
-
             return <Redirect to="/convocatorias/publicas" />;
           }}
         />
@@ -81,6 +84,9 @@ export default function BasePage() {
           component={ConvocatoriasPublicasPage}
         />
 
+        <ContentRoute path="/reportes/convocatorias" component={ReportesConvocatoriaPage} />
+        <ContentRoute path="/usuarios" component={GestionUsuarios} />
+        <ContentRoute path="/crear-convocatoria" component={CrearConvocatoriaPage} />
         <ContentRoute path="/builder" component={BuilderPage} />
         <ContentRoute path="/my-page" component={MyPage} />
         <Route path="/google-material" component={GoogleMaterialPage} />
