@@ -72,6 +72,15 @@ const ICONOS = {
       <path d="M9 12L11 14L15 10" stroke="#335EEA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
+  catalogo: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <path opacity="0.3" d="M5 4H19C20.1046 4 21 4.89543 21 6V8H3V6C3 4.89543 3.89543 4 5 4Z" fill="#335EEA" />
+      <path d="M3 8H21V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V8Z" fill="#335EEA" opacity="0.3" />
+      <path d="M8 12H16M8 15H13" stroke="#335EEA" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="18" cy="15" r="3" fill="#335EEA" />
+      <path d="M17 15H19M18 14V16" stroke="white" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  ),
 }
 
 export function AsideMenuList({ layoutProps }) {
@@ -227,6 +236,7 @@ export function AsideMenuList({ layoutProps }) {
           </li>
         )}
 
+
         {/* ── Nueva Convocatoria — EXCLUSIVO SuperAdmin (nivel 1) ── */}
         {esSuperAdmin && tieneAcceso('convocatorias') && (
           <li
@@ -243,6 +253,27 @@ export function AsideMenuList({ layoutProps }) {
                 <span
                   className='label label-inline label-sm font-weight-bold'
                   style={{ background: '#E8FFF3', color: '#1BC5BD', fontSize: 10 }}
+                >
+                  SUPER
+                </span>
+              </span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* ── Panel de Catálogo — EXCLUSIVO SuperAdmin (nivel 1) ── */}
+        {esSuperAdmin && (
+          <li
+            className={`menu-item ${getMenuItemActive('/admin/catalogo', false)}`}
+            aria-haspopup='true'
+          >
+            <NavLink className='menu-link' to='/admin/catalogo'>
+              <span className='svg-icon menu-icon'>{ICONOS.catalogo}</span>
+              <span className='menu-text'>Panel de Catálogo</span>
+              <span className='menu-label' style={{ marginLeft: 'auto' }}>
+                <span
+                  className='label label-inline label-sm font-weight-bold'
+                  style={{ background: '#FFF5F8', color: '#F64E60', fontSize: 10 }}
                 >
                   SUPER
                 </span>

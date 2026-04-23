@@ -8,6 +8,7 @@ import ErrorsPage from "./modules/ErrorsExamples/ErrorsPage";
 import CompletarPerfilPage from './pages/CompletarPerfilPage'
 import SeleccionPlazaPage from './pages/SeleccionPlazaPage'
 import AdminNotasBilinguesPage from './pages/admin/AdminNotasBilinguesPage'
+import CatalogoPanelPage from './pages/admin/CatalogoPanelPage'  // ← NUEVO
 
 export function Routes() {
   const { isAuthorized } = useSelector(
@@ -38,10 +39,17 @@ export function Routes() {
         </Route>
       )}
 
-      {/* ── NUEVO ── */}
+      {/* Notas Bilingüe — Admin y SuperAdmin */}
       {isAuthorized && (
         <Route path="/admin/bilingue/notas" exact>
           <Layout><AdminNotasBilinguesPage /></Layout>
+        </Route>
+      )}
+
+      {/* Panel de Catálogo — solo SuperAdmin */}
+      {isAuthorized && (
+        <Route path="/admin/catalogo" exact>
+          <Layout><CatalogoPanelPage /></Layout>
         </Route>
       )}
 

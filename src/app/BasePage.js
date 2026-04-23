@@ -9,11 +9,11 @@ import MiPerfilPage from "./pages/MiPerfilPage";
 import ConvocatoriasPage from "./pages/ConvocatoriasPage";
 import ConvocatoriasPublicasPage from "./pages/ConvocatoriasPublicasPage";
 import SeleccionPlazaPage from "./pages/SeleccionPlazaPage";
-import MisPostulacionesPage from "./pages/MisPostulacionesPage"; // ← NUEVO
-
+import MisPostulacionesPage from "./pages/MisPostulacionesPage";
 import ReportesConvocatoriaPage from './pages/ReportesConvocatoriaPage'
 import GestionUsuarios from './pages/GestionUsuarios'
 import CrearConvocatoriaPage from './pages/CrearConvocatoriaPage'
+import CatalogoPanelPage from './pages/admin/CatalogoPanelPage'  // ← NUEVO
 
 const GoogleMaterialPage = lazy(() =>
   import("./modules/GoogleMaterialExamples/GoogleMaterialPage")
@@ -35,15 +35,9 @@ export default function BasePage() {
   const roleNivel = user?.role_nivel || 5;
 
   useEffect(() => {
-    if (!user || Object.keys(user).length === 0) {
-      return;
-    }
-
+    if (!user || Object.keys(user).length === 0) return;
     const currentPath = window.location.pathname;
-
-    // Docente: si entra al dashboard, llevarlo a convocatorias públicas
     if (roleNivel === 5 && currentPath === "/dashboard") {
-      console.log("🚀 BasePage: Redirigiendo docente a /convocatorias/publicas");
       history.push("/convocatorias/publicas");
     }
   }, [user, history, roleNivel]);
@@ -63,8 +57,20 @@ export default function BasePage() {
         {/* Selección de Plaza */}
         <ContentRoute path="/seleccion-plaza" component={SeleccionPlazaPage} />
 
-        {/* ── NUEVO: Mis Postulaciones — solo docentes ── */}
+        {/* Mis Postulaciones — docentes */}
         <ContentRoute path="/mis-postulaciones" component={MisPostulacionesPage} />
+
+        {/* Panel de Catálogo — SuperAdmin */}
+        <Route
+          path="/admin/catalogo"
+          exact
+          render={(props) => {
+            if (roleNivel === 1) {
+              return <CatalogoPanelPage {...props} />
+            }
+            return <Redirect to="/dashboard" />
+          }}
+        />
 
         {/* Convocatorias - Gestión admin */}
         <Route
