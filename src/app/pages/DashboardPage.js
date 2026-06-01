@@ -4,7 +4,7 @@ import { useSelector } from 'react-redux'
 import { Link } from 'react-router-dom'
 import DocenteDashboard from './DocenteDashboard'
 
-const API_BASE = 'http://localhost:8000/api/v1'
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'
 
 const COLOR_ROL = {
   1: { bg: '#FFF5F8', border: '#F64E60', text: '#F64E60' },

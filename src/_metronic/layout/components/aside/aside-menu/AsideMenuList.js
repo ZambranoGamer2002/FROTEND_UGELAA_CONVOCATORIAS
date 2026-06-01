@@ -6,7 +6,7 @@ import { NavLink } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { checkIsActive } from '../../../../_helpers'
 
-const API_BASE = 'http://localhost:8000/api/v1'
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'
 
 const ICONOS = {
   dashboard: (
@@ -58,6 +58,15 @@ const ICONOS = {
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
       <path opacity="0.3" d="M2 12C2 7.02944 6.02944 3 11 3H13C17.9706 3 22 7.02944 22 12C22 16.9706 17.9706 21 13 21H11C6.02944 21 2 16.9706 2 12Z" fill="#335EEA" />
       <path d="M7 12H17M14 9L17 12L14 15" stroke="#335EEA" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  sancionados: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <path opacity="0.3" d="M12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22C17.5228 22 12 17.5228 22 12C22 6.47715 17.5228 2 12 2Z" fill="#F64E60" />
+      <path d="M12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22C17.5228 22 12 17.5228 22 12C22 6.47715 17.5228 2 12 2Z" fill="#F64E60" opacity="0.3" />
+      <path d="M12 7V13M12 16V17" stroke="#F64E60" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="12" cy="12" r="10" stroke="#F64E60" strokeWidth="1.5" fill="none" />
+      <path d="M8 8L16 16M16 8L8 16" stroke="#F64E60" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   ),
   configuracion: (
@@ -171,7 +180,7 @@ export function AsideMenuList({ layoutProps }) {
   // ── Helpers de visibilidad por sección ──────────────────────────────
   const esSuperAdmin = roleNivel === 1
   const esAdmin = roleNivel === 2
-  const esRecepcion = roleNivel === 3
+  //const esRecepcion = roleNivel === 3
   const esDocente = roleNivel === 5
   const esStaff = roleNivel <= 3   // SuperAdmin + Admin + Recepción
 
@@ -238,7 +247,7 @@ export function AsideMenuList({ layoutProps }) {
 
 
         {/* ── Nueva Convocatoria — EXCLUSIVO SuperAdmin (nivel 1) ── */}
-        {esSuperAdmin && tieneAcceso('convocatorias') && (
+        {(esSuperAdmin || esAdmin) && tieneAcceso('convocatorias') && (
           <li
             className={`menu-item ${getMenuItemActive('/crear-convocatoria', false)}`}
             aria-haspopup='true'
@@ -254,7 +263,7 @@ export function AsideMenuList({ layoutProps }) {
                   className='label label-inline label-sm font-weight-bold'
                   style={{ background: '#E8FFF3', color: '#1BC5BD', fontSize: 10 }}
                 >
-                  SUPER
+                  {roleNivel === 1 ? 'SUPER' : 'ADMIN'}
                 </span>
               </span>
             </NavLink>
@@ -275,7 +284,7 @@ export function AsideMenuList({ layoutProps }) {
                   className='label label-inline label-sm font-weight-bold'
                   style={{ background: '#FFF5F8', color: '#F64E60', fontSize: 10 }}
                 >
-                  SUPER
+                  {roleNivel === 1 ? 'SUPER' : 'ADMIN'}
                 </span>
               </span>
             </NavLink>
@@ -304,6 +313,19 @@ export function AsideMenuList({ layoutProps }) {
             <NavLink className='menu-link' to='/admin/bilingue/notas'>
               <span className='svg-icon menu-icon'>{ICONOS.bilingue}</span>
               <span className='menu-text'>Notas Bilingüe</span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* ── Docentes Sancionados — solo Admin y SuperAdmin ── */}   {/* ← NUEVO */}
+        {(esSuperAdmin || esAdmin) && (
+          <li
+            className={`menu-item ${getMenuItemActive('/admin/sanciones', false)}`}
+            aria-haspopup='true'
+          >
+            <NavLink className='menu-link' to='/admin/sanciones'>
+              <span className='svg-icon menu-icon'>{ICONOS.sancionados}</span>
+              <span className='menu-text'>Docentes Sancionados</span>
             </NavLink>
           </li>
         )}
@@ -426,11 +448,6 @@ export function AsideMenuList({ layoutProps }) {
                   }`}
                 style={{ fontSize: '11px', letterSpacing: '0.5px' }}
               >
-                {roleNivel === 1 && '👑 '}
-                {roleNivel === 2 && '🔧 '}
-                {roleNivel === 3 && '📋 '}
-                {roleNivel === 4 && '👤 '}
-                {roleNivel === 5 && '🎓 '}
                 {roleInfo.nombre}
               </span>
             </div>

@@ -3,7 +3,6 @@ import { useHistory } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'
-const HEADER_GRADIENT = 'linear-gradient(135deg, #1e3a5f 0%, #2d5a8e 100%)'
 
 const ESTADO_POST = {
     BORRADOR: { label: 'En Progreso', color: '#FFA800', bg: '#FFF4DE', icon: 'fa-edit' },
@@ -37,7 +36,23 @@ const MENSAJES_ESTADO = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Panel de progreso — docente YA postulado
+// Badge de estado reutilizable
+// ─────────────────────────────────────────────────────────────────────────────
+const EstadoBadge = ({ estado }) => {
+    const cfg = ESTADO_POST[estado] || { label: estado, color: '#B5B5C3', bg: '#F3F6F9', icon: 'fa-circle' }
+    return (
+        <span
+            className='label label-inline font-weight-bold'
+            style={{ background: cfg.bg, color: cfg.color, padding: '6px 14px', fontSize: 12, borderRadius: 6 }}
+        >
+            <i className={`fas ${cfg.icon} mr-2`} />
+            {cfg.label}
+        </span>
+    )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Panel: docente YA postulado
 // ─────────────────────────────────────────────────────────────────────────────
 function PanelProgreso({ postulacion, convocatoria, onVerDetalle, onModificarPlaza }) {
     const cfg = ESTADO_POST[postulacion.estado] || { label: postulacion.estado, color: '#B5B5C3', bg: '#F3F6F9', icon: 'fa-circle' }
@@ -48,39 +63,39 @@ function PanelProgreso({ postulacion, convocatoria, onVerDetalle, onModificarPla
     const total = postulacion.total_documentos_requeridos || Math.max(docs.length, 4)
     const pct = total > 0 ? Math.min(100, Math.round((subidos / total) * 100)) : 0
     const colorBarra = pct === 100 ? '#1BC5BD' : pct >= 50 ? '#3699FF' : '#FFA800'
-
-    const puedeModificar = postulacion.estado === 'BORRADOR'
     const diasRestantes = convocatoria?.dias_restantes ?? 0
+    const puedeModificar = postulacion.estado === 'BORRADOR'
 
     return (
-        <div className='card card-custom' style={{ borderLeft: `4px solid ${cfg.color}` }}>
-            <div className='card-body p-7'>
+        <div className='card card-custom shadow-sm' style={{ borderLeft: `4px solid ${cfg.color}`, borderRadius: 12 }}>
+            <div className='card-body p-8'>
 
-                {/* ── Header ── */}
-                <div className='d-flex align-items-start justify-content-between mb-5 flex-wrap' style={{ gap: 10 }}>
+                {/* Header */}
+                <div className='d-flex align-items-start justify-content-between mb-6 flex-wrap' style={{ gap: 10 }}>
                     <div>
-                        <h5 className='font-weight-bolder text-dark mb-1'>Mi Postulación</h5>
+                        <div className='d-flex align-items-center mb-2' style={{ gap: 8 }}>
+                            <i className='fas fa-file-signature text-primary' style={{ fontSize: 18 }} />
+                            <h5 className='font-weight-bolder text-dark mb-0'>Mi Postulación</h5>
+                        </div>
                         <span className='text-muted font-size-sm'>
                             {convocatoria?.titulo || '—'}
                         </span>
+                        <div className='text-muted font-size-xs mt-1'>
+                            <i className='fas fa-hashtag mr-1' />
+                            {convocatoria?.codigo || '—'}
+                        </div>
                     </div>
-                    <span
-                        className='label label-inline font-weight-bold'
-                        style={{ background: cfg.bg, color: cfg.color, padding: '6px 14px', fontSize: 12 }}
-                    >
-                        <i className={`fas ${cfg.icon} mr-2`} />
-                        {cfg.label}
-                    </span>
+                    <EstadoBadge estado={postulacion.estado} />
                 </div>
 
-                {/* ── Mensaje estado ── */}
-                <div className='rounded p-4 mb-5 d-flex align-items-start' style={{ background: msg.bg }}>
+                {/* Mensaje de estado */}
+                <div className='rounded p-4 mb-6 d-flex align-items-start' style={{ background: msg.bg }}>
                     <i className={`fas ${msg.icon} mr-3 mt-1`} style={{ color: msg.color, fontSize: 16 }} />
                     <span style={{ color: msg.color, fontSize: 13 }}>{msg.texto}</span>
                 </div>
 
-                {/* ── Stats — sin puntaje ── */}
-                <div className='row text-center mb-5'>
+                {/* Stats */}
+                <div className='row text-center mb-6'>
                     <div className='col-4'>
                         <div className='bg-light rounded p-3'>
                             <div className='text-muted font-size-xs mb-1'>Código</div>
@@ -92,15 +107,10 @@ function PanelProgreso({ postulacion, convocatoria, onVerDetalle, onModificarPla
                     <div className='col-4'>
                         <div className='bg-light rounded p-3'>
                             <div className='text-muted font-size-xs mb-1'>Días restantes</div>
-                            <div
-                                className='font-weight-bolder'
-                                style={{
-                                    fontSize: 13,
-                                    color: diasRestantes <= 3 ? '#F64E60'
-                                        : diasRestantes <= 7 ? '#FFA800'
-                                            : '#1BC5BD'
-                                }}
-                            >
+                            <div className='font-weight-bolder' style={{
+                                fontSize: 13,
+                                color: diasRestantes <= 3 ? '#F64E60' : diasRestantes <= 7 ? '#FFA800' : '#1BC5BD'
+                            }}>
                                 {diasRestantes > 0 ? `${diasRestantes} días` : 'Plazo vencido'}
                             </div>
                         </div>
@@ -108,18 +118,15 @@ function PanelProgreso({ postulacion, convocatoria, onVerDetalle, onModificarPla
                     <div className='col-4'>
                         <div className='bg-light rounded p-3'>
                             <div className='text-muted font-size-xs mb-1'>Documentos</div>
-                            <div
-                                className='font-weight-bolder'
-                                style={{ fontSize: 13, color: pct === 100 ? '#1BC5BD' : '#3699FF' }}
-                            >
+                            <div className='font-weight-bolder' style={{ fontSize: 13, color: pct === 100 ? '#1BC5BD' : '#3699FF' }}>
                                 {subidos} / {total}
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* ── Plaza seleccionada ── */}
-                <div className='border rounded p-4 mb-5'>
+                {/* Plaza seleccionada */}
+                <div className='border rounded p-4 mb-6' style={{ borderRadius: 8 }}>
                     <div className='d-flex align-items-center justify-content-between mb-3'>
                         <span className='font-weight-bolder text-dark' style={{ fontSize: 13 }}>
                             <i className='fas fa-map-marker-alt mr-2 text-primary' />
@@ -132,7 +139,7 @@ function PanelProgreso({ postulacion, convocatoria, onVerDetalle, onModificarPla
                                 style={{ borderRadius: 6, fontSize: 11 }}
                             >
                                 <i className='fas fa-pencil-alt mr-1' />
-                                Modificar selección
+                                Modificar
                             </button>
                         )}
                     </div>
@@ -160,8 +167,8 @@ function PanelProgreso({ postulacion, convocatoria, onVerDetalle, onModificarPla
                     </div>
                 </div>
 
-                {/* ── Barra de progreso documentos ── */}
-                <div className='mb-6'>
+                {/* Barra de progreso */}
+                <div className='mb-7'>
                     <div className='d-flex justify-content-between align-items-center mb-2'>
                         <span className='font-weight-bold text-dark' style={{ fontSize: 13 }}>
                             <i className='fas fa-file-alt mr-2 text-primary' />
@@ -174,12 +181,7 @@ function PanelProgreso({ postulacion, convocatoria, onVerDetalle, onModificarPla
                     <div className='progress' style={{ height: 8, borderRadius: 4, background: '#EBEDF3' }}>
                         <div
                             className='progress-bar'
-                            style={{
-                                width: `${pct}%`,
-                                background: colorBarra,
-                                borderRadius: 4,
-                                transition: 'width 0.5s ease',
-                            }}
+                            style={{ width: `${pct}%`, background: colorBarra, borderRadius: 4, transition: 'width 0.5s ease' }}
                         />
                     </div>
                     <div className='text-muted font-size-xs mt-1'>
@@ -187,23 +189,21 @@ function PanelProgreso({ postulacion, convocatoria, onVerDetalle, onModificarPla
                     </div>
                 </div>
 
-                {/* ── Botón principal ── */}
                 <button
                     className='btn btn-primary btn-block font-weight-bold'
                     onClick={onVerDetalle}
-                    style={{ borderRadius: 8 }}
+                    style={{ borderRadius: 8, padding: '12px 0' }}
                 >
                     <i className='fas fa-eye mr-2' />
                     Ver mi Postulación
                 </button>
-
             </div>
         </div>
     )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Panel convocatoria disponible — docente AÚN NO postulado
+// Panel: convocatoria disponible — docente AÚN NO postulado
 // ─────────────────────────────────────────────────────────────────────────────
 function PanelConvocatoria({ convocatoria, onPostular }) {
     const dias = convocatoria.dias_restantes ?? 0
@@ -211,96 +211,152 @@ function PanelConvocatoria({ convocatoria, onPostular }) {
     const bgDias = dias <= 3 ? '#FFF5F8' : dias <= 7 ? '#FFF4DE' : '#E8FFF3'
 
     return (
-        <div className='card card-custom' style={{ borderLeft: '4px solid #3699FF' }}>
-            <div className='card-body p-7'>
+        <div className='card card-custom shadow-sm' style={{ borderRadius: 12, overflow: 'hidden' }}>
 
-                {/* ── Header ── */}
-                <div className='d-flex align-items-start justify-content-between flex-wrap mb-5' style={{ gap: 12 }}>
+            {/* Banner superior */}
+            <div style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2d5a8e 100%)', padding: '28px 32px' }}>
+                <div className='d-flex align-items-center justify-content-between flex-wrap' style={{ gap: 16 }}>
                     <div>
-                        <div className='d-flex align-items-center mb-2' style={{ gap: 8 }}>
+                        <div className='d-flex align-items-center mb-2' style={{ gap: 10 }}>
                             <span
                                 className='label label-inline font-weight-bold'
-                                style={{ background: '#E8FFF3', color: '#1BC5BD', padding: '4px 10px', fontSize: 11 }}
+                                style={{ background: 'rgba(27,197,189,0.25)', color: '#1BC5BD', padding: '4px 12px', fontSize: 11, borderRadius: 20 }}
                             >
-                                <i className='fas fa-play-circle mr-1' style={{ fontSize: 10 }} />
-                                En Curso
+                                <i className='fas fa-broadcast-tower mr-1' style={{ fontSize: 10 }} />
+                                CONVOCATORIA ACTIVA
                             </span>
-                            <span className='text-muted font-size-xs'>
+                            <span className='font-size-xs' style={{ color: 'rgba(255,255,255,0.6)' }}>
                                 <i className='fas fa-hashtag mr-1' />
                                 {convocatoria.codigo}
                             </span>
                         </div>
-                        <h5 className='font-weight-bolder text-dark mb-1'>{convocatoria.titulo}</h5>
+                        <h4 className='font-weight-bolder mb-1' style={{ color: '#fff' }}>
+                            {convocatoria.titulo}
+                        </h4>
                         {convocatoria.descripcion && (
-                            <p className='text-muted font-size-sm mb-0' style={{ maxWidth: 500 }}>
+                            <p className='mb-0 font-size-sm' style={{ color: 'rgba(255,255,255,0.7)', maxWidth: 480 }}>
                                 {convocatoria.descripcion}
                             </p>
                         )}
                     </div>
 
-                    {/* Días restantes */}
-                    <div className='d-flex flex-column align-items-center'>
+                    {/* Contador de días */}
+                    <div className='text-center'>
                         <div
-                            className='rounded px-4 py-3 text-center mb-3'
-                            style={{ background: bgDias, minWidth: 80 }}
+                            className='rounded px-5 py-4 mb-2'
+                            style={{ background: bgDias, minWidth: 90, display: 'inline-block' }}
                         >
-                            <div className='font-weight-bolder' style={{ color: colorDias, fontSize: 28, lineHeight: 1 }}>
+                            <div className='font-weight-bolder' style={{ color: colorDias, fontSize: 36, lineHeight: 1 }}>
                                 {dias > 0 ? dias : '0'}
                             </div>
-                            <div style={{ color: colorDias, fontSize: 11, marginTop: 2 }}>
-                                {dias > 0 ? 'días' : 'vencido'}
+                            <div style={{ color: colorDias, fontSize: 11, marginTop: 4 }}>
+                                {dias === 1 ? 'día restante' : dias > 1 ? 'días restantes' : 'vencido'}
                             </div>
                         </div>
-                        <button
-                            className='btn btn-primary font-weight-bold btn-block'
-                            onClick={() => onPostular(convocatoria)}
-                            style={{ borderRadius: 8 }}
-                        >
-                            <i className='fas fa-paper-plane mr-2' />
-                            Postular
-                        </button>
                     </div>
                 </div>
+            </div>
 
-                {/* ── Fechas ── */}
+            <div className='card-body p-8'>
+
+                {/* Fechas */}
                 <div
-                    className='rounded p-4 d-flex align-items-center flex-wrap'
-                    style={{ background: '#F8F9FA', gap: 32 }}
+                    className='rounded p-5 mb-7 d-flex align-items-center flex-wrap justify-content-between'
+                    style={{ background: '#F8F9FA', gap: 20 }}
                 >
-                    <div>
-                        <div className='text-muted font-size-xs mb-1'>
-                            <i className='fas fa-calendar-check mr-1' />
-                            Inicio postulación
-                        </div>
-                        <div className='font-weight-bolder text-dark font-size-sm'>
-                            {convocatoria.fecha_inicio_postulacion || '—'}
-                        </div>
-                    </div>
-                    <div>
-                        <i className='fas fa-arrow-right text-muted' />
-                    </div>
-                    <div>
-                        <div className='text-muted font-size-xs mb-1'>
-                            <i className='fas fa-calendar-times mr-1' />
-                            Cierre postulación
-                        </div>
-                        <div className='font-weight-bolder text-dark font-size-sm'>
-                            {convocatoria.fecha_fin_postulacion || '—'}
-                        </div>
-                    </div>
-                    {dias > 0 && (
-                        <div className='ml-auto'>
-                            <div className='text-muted font-size-xs mb-1'>Todos los docentes habilitados pueden postular</div>
-                            <div className='d-flex align-items-center'>
-                                <i className='fas fa-users mr-2' style={{ color: '#1BC5BD' }} />
-                                <span className='font-weight-bold text-dark font-size-sm'>
-                                    Sin límite de postulantes
-                                </span>
+                    <div className='d-flex align-items-center' style={{ gap: 32 }}>
+                        <div>
+                            <div className='text-muted font-size-xs mb-1'>
+                                <i className='fas fa-calendar-check mr-1 text-success' />
+                                Inicio de postulación
                             </div>
+                            <div className='font-weight-bolder text-dark'>
+                                {convocatoria.fecha_inicio_postulacion || '—'}
+                            </div>
+                        </div>
+                        <i className='fas fa-long-arrow-alt-right text-muted' style={{ fontSize: 18 }} />
+                        <div>
+                            <div className='text-muted font-size-xs mb-1'>
+                                <i className='fas fa-calendar-times mr-1 text-danger' />
+                                Cierre de postulación
+                            </div>
+                            <div className='font-weight-bolder text-dark'>
+                                {convocatoria.fecha_fin_postulacion || '—'}
+                            </div>
+                        </div>
+                    </div>
+
+                    {dias > 0 && (
+                        <div className='d-flex align-items-center' style={{ gap: 8 }}>
+                            <i className='fas fa-users text-primary' />
+                            <span className='font-weight-bold text-dark font-size-sm'>
+                                Todos los docentes habilitados pueden postular
+                            </span>
                         </div>
                     )}
                 </div>
 
+                {/* Alerta si quedan pocos días */}
+                {dias > 0 && dias <= 5 && (
+                    <div
+                        className='rounded p-4 mb-6 d-flex align-items-center'
+                        style={{ background: '#FFF4DE', border: '1px solid #FFE2A8' }}
+                    >
+                        <i className='fas fa-exclamation-triangle mr-3' style={{ color: '#FFA800', fontSize: 18 }} />
+                        <div>
+                            <div className='font-weight-bolder' style={{ color: '#FFA800', fontSize: 13 }}>
+                                ¡Quedan solo {dias} {dias === 1 ? 'día' : 'días'}!
+                            </div>
+                            <div className='text-muted font-size-xs mt-1'>
+                                No dejes para después tu postulación. El plazo cierra pronto.
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* CTA principal */}
+                <button
+                    className='btn btn-primary btn-block font-weight-bolder'
+                    onClick={() => onPostular(convocatoria)}
+                    disabled={dias <= 0}
+                    style={{ borderRadius: 10, padding: '14px 0', fontSize: 15, letterSpacing: 0.3 }}
+                >
+                    {dias > 0
+                        ? <><i className='fas fa-paper-plane mr-2' />Postularme a esta Convocatoria</>
+                        : <><i className='fas fa-lock mr-2' />Plazo de postulación cerrado</>
+                    }
+                </button>
+
+                {dias <= 0 && (
+                    <div className='text-center text-muted font-size-xs mt-3'>
+                        El período de postulación ha finalizado.
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Estado vacío
+// ─────────────────────────────────────────────────────────────────────────────
+function SinConvocatoria() {
+    return (
+        <div className='card card-custom shadow-sm' style={{ borderRadius: 12 }}>
+            <div className='card-body text-center py-16'>
+                <div
+                    className='d-flex align-items-center justify-content-center rounded-circle mx-auto mb-6'
+                    style={{ width: 90, height: 90, background: '#F3F6F9' }}
+                >
+                    <i className='fas fa-calendar-times' style={{ fontSize: 40, color: '#B5B5C3' }} />
+                </div>
+                <h4 className='font-weight-bolder text-dark mb-3'>
+                    Sin convocatorias activas
+                </h4>
+                <p className='text-muted font-size-sm mb-0' style={{ maxWidth: 360, margin: '0 auto' }}>
+                    No hay convocatorias disponibles en este momento.<br />
+                    Vuelve a consultar próximamente o comunícate con tu UGEL.
+                </p>
             </div>
         </div>
     )
@@ -314,8 +370,8 @@ const ConvocatoriasPublicasPage = () => {
     const auth = useSelector((s) => s.auth)
     const token = auth?.authToken || auth?.accessToken || localStorage.getItem('token')
 
-    const [convocatoria, setConvocatoria] = useState(null)   // única convocatoria activa
-    const [postulacion, setPostulacion] = useState(null)   // postulación del docente (si existe)
+    const [convocatoria, setConvocatoria] = useState(null)
+    const [postulacion, setPostulacion] = useState(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
 
@@ -328,21 +384,39 @@ const ConvocatoriasPublicasPage = () => {
             setLoading(true)
             setError(null)
 
-            // 1. Convocatoria activa (PUBLICADA) — solo la más reciente
-            const respConv = await fetch(`${API_BASE}/convocatorias/?estado=PUBLICADA`, { headers })
-            if (!respConv.ok) throw new Error('Error al cargar convocatorias')
-            const dataConv = await respConv.json()
-            const lista = Array.isArray(dataConv)
-                ? dataConv
-                : Array.isArray(dataConv?.convocatorias)
-                    ? dataConv.convocatorias
-                    : []
+            // ✅ FIX: usar el endpoint de convocatoria activa del docente
+            // Este endpoint ya filtra por provincia del docente y fechas vigentes
+            const respConv = await fetch(`${API_BASE}/convocatorias/activa`, { headers })
 
-            // Tomar solo la convocatoria más reciente activa
-            const convActiva = lista.length > 0 ? lista[0] : null
+            let convActiva = null
+
+            if (respConv.ok) {
+                const dataConv = await respConv.json()
+                // El endpoint /activa devuelve un objeto, no una lista
+                convActiva = dataConv?.id ? dataConv : null
+            } else if (respConv.status === 404) {
+                // 404 = no hay convocatoria activa → válido, no es error
+                convActiva = null
+            } else {
+                // Fallback: intentar con lista filtrada
+                const respLista = await fetch(
+                    `${API_BASE}/convocatorias/?estado=PUBLICADA&solo_activas=true`,
+                    { headers }
+                )
+                if (respLista.ok) {
+                    const dataLista = await respLista.json()
+                    const lista = Array.isArray(dataLista)
+                        ? dataLista
+                        : Array.isArray(dataLista?.convocatorias)
+                            ? dataLista.convocatorias
+                            : []
+                    convActiva = lista.length > 0 ? lista[0] : null
+                }
+            }
+
             setConvocatoria(convActiva)
 
-            // 2. Si hay convocatoria activa, verificar si el docente ya postuló
+            // Verificar si el docente ya postuló
             if (convActiva) {
                 try {
                     const respPost = await fetch(
@@ -352,7 +426,6 @@ const ConvocatoriasPublicasPage = () => {
                     if (respPost.ok) {
                         const dataPost = await respPost.json()
                         if (dataPost?.id) {
-                            // Detalle completo con documentos — este SÍ existe: GET /{postulacion_id}
                             const respDetalle = await fetch(
                                 `${API_BASE}/postulaciones/${dataPost.id}`,
                                 { headers }
@@ -363,8 +436,7 @@ const ConvocatoriasPublicasPage = () => {
                             setPostulacion(null)
                         }
                     } else {
-                        // 404 = no ha postulado aún — válido
-                        setPostulacion(null)
+                        setPostulacion(null) // 404 = no ha postulado aún
                     }
                 } catch {
                     setPostulacion(null)
@@ -392,9 +464,7 @@ const ConvocatoriasPublicasPage = () => {
     }
 
     const handleVerDetalle = () => {
-        if (postulacion?.id) {
-            history.push(`/postulaciones/${postulacion.id}/documentos`)
-        }
+        if (postulacion?.id) history.push(`/postulaciones/${postulacion.id}/documentos`)
     }
 
     const handleModificarPlaza = () => {
@@ -404,11 +474,11 @@ const ConvocatoriasPublicasPage = () => {
             search: `?convocatoria_id=${postulacion.convocatoria_id}&postulacion_id=${postulacion.id}&modo=editar`,
             state: {
                 convocatoria_id: postulacion.convocatoria_id,
-                convocatoria: convocatoria,
+                convocatoria,
                 postulacion_id: postulacion.id,
-                postulacion: postulacion,   // ← línea nueva
+                postulacion,
                 modo: 'editar',
-            }
+            },
         })
     }
 
@@ -418,28 +488,31 @@ const ConvocatoriasPublicasPage = () => {
     return (
         <div className='container-fluid px-0'>
 
-            {/* ── Header ── */}
-            <div className='card card-custom mb-7' style={{ background: HEADER_GRADIENT, border: 'none' }}>
+            {/* Header */}
+            <div
+                className='card card-custom mb-7'
+                style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2d5a8e 100%)', border: 'none', borderRadius: 12 }}
+            >
                 <div className='card-body py-8 px-8'>
                     <div className='d-flex align-items-center justify-content-between flex-wrap' style={{ gap: 12 }}>
                         <div>
                             <h2 className='text-white font-weight-bolder mb-1'>
+                                <i className='fas fa-bullhorn mr-3' style={{ opacity: 0.8 }} />
                                 Convocatorias Disponibles
                             </h2>
-                            <p className='text-white mb-0' style={{ opacity: 0.8 }}>
-                                Consulta las convocatorias activas y el estado de tu postulación.
+                            <p className='text-white mb-0' style={{ opacity: 0.7, fontSize: 14 }}>
+                                Consulta la convocatoria activa y el estado de tu postulación.
                             </p>
                         </div>
-                        {/* Días restantes en header si hay convocatoria */}
                         {convocatoria && (
                             <div
                                 className='rounded px-5 py-3 text-center d-none d-md-block'
-                                style={{ background: 'rgba(255,255,255,0.15)' }}
+                                style={{ background: 'rgba(255,255,255,0.12)' }}
                             >
                                 <div className='text-white font-weight-bolder' style={{ fontSize: 32, lineHeight: 1 }}>
                                     {convocatoria.dias_restantes ?? 0}
                                 </div>
-                                <div className='text-white' style={{ fontSize: 12, opacity: 0.8 }}>
+                                <div className='text-white' style={{ fontSize: 12, opacity: 0.75 }}>
                                     días restantes
                                 </div>
                             </div>
@@ -448,30 +521,29 @@ const ConvocatoriasPublicasPage = () => {
                 </div>
             </div>
 
-            {/* ── Loading ── */}
+            {/* Loading */}
             {loading && (
-                <div className='text-center py-12'>
-                    <div className='spinner-border text-primary mb-3' role='status' />
-                    <div className='text-muted font-size-sm'>Cargando...</div>
+                <div className='text-center py-14'>
+                    <div className='spinner-border text-primary mb-3' role='status' style={{ width: 40, height: 40 }} />
+                    <div className='text-muted font-size-sm'>Cargando convocatoria...</div>
                 </div>
             )}
 
-            {/* ── Error ── */}
+            {/* Error */}
             {!loading && error && (
-                <div className='alert alert-danger d-flex align-items-center'>
-                    <i className='fas fa-exclamation-circle mr-2' />
-                    {error}
+                <div className='alert alert-danger d-flex align-items-center' style={{ borderRadius: 10 }}>
+                    <i className='fas fa-exclamation-circle mr-3' style={{ fontSize: 18 }} />
+                    <span>{error}</span>
                     <button className='btn btn-sm btn-light ml-auto' onClick={cargar}>
-                        <i className='fas fa-redo mr-1' />
-                        Reintentar
+                        <i className='fas fa-redo mr-1' /> Reintentar
                     </button>
                 </div>
             )}
 
-            {/* ── Contenido ── */}
+            {/* Contenido */}
             {!loading && !error && (
                 <>
-                    {/* CASO 1: Docente ya postulado → mostrar progreso */}
+                    {/* CASO 1: Ya postulado */}
                     {postulacion && convocatoria && (
                         <PanelProgreso
                             postulacion={postulacion}
@@ -481,7 +553,7 @@ const ConvocatoriasPublicasPage = () => {
                         />
                     )}
 
-                    {/* CASO 2: Hay convocatoria activa pero no ha postulado */}
+                    {/* CASO 2: Convocatoria activa, aún no postulado */}
                     {!postulacion && convocatoria && (
                         <PanelConvocatoria
                             convocatoria={convocatoria}
@@ -489,27 +561,8 @@ const ConvocatoriasPublicasPage = () => {
                         />
                     )}
 
-                    {/* CASO 3: No hay convocatoria activa */}
-                    {!convocatoria && (
-                        <div className='card card-custom'>
-                            <div className='card-body text-center py-14'>
-                                <div
-                                    className='d-flex align-items-center justify-content-center rounded-circle mx-auto mb-5'
-                                    style={{ width: 80, height: 80, background: '#F3F6F9' }}
-                                >
-                                    <i className='fas fa-calendar-times text-muted' style={{ fontSize: 36 }} />
-                                </div>
-                                <h4 className='font-weight-bolder text-dark mb-2'>
-                                    Sin convocatorias activas
-                                </h4>
-                                <p className='text-muted font-size-sm mb-0'>
-                                    No hay convocatorias disponibles en este momento.
-                                    <br />
-                                    Vuelve a consultar próximamente.
-                                </p>
-                            </div>
-                        </div>
-                    )}
+                    {/* CASO 3: Sin convocatoria activa */}
+                    {!convocatoria && <SinConvocatoria />}
                 </>
             )}
 

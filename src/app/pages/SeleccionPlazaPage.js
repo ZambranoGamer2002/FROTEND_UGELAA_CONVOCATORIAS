@@ -1,10 +1,6 @@
 /**
- * SeleccionPlazaPage.js — v7
- * FUSIÓN: Diseño antiguo + fixes de postulación activa
- * FIXES:
- *  1. "Sin convocatoria seleccionada" desaparece cuando se detecta postulación activa
- *  2. Modo edición automático si el docente ya tiene postulación activa
- *  3. Precarga correcta de selección desde postulación existente
+ * SeleccionPlazaPage.js — v8
+ * FIX: Detecta convocatoria cerrada y bloquea el wizard mostrando aviso claro.
  */
 import React, { useState, useEffect, useRef } from 'react'
 import { useHistory, useLocation } from 'react-router-dom'
@@ -93,6 +89,37 @@ const StepIndicator = ({ pasoActual }) => {
   )
 }
 
+// ── Banner: Convocatoria Cerrada ──────────────────────────────────────────────
+const BannerConvocatoriaCerrada = ({ onVerConvocatorias }) => (
+  <div className='card card-custom'>
+    <div className='card-body p-10 text-center'>
+      <div
+        className='d-flex align-items-center justify-content-center rounded-circle mx-auto mb-6'
+        style={{ width: 80, height: 80, background: '#FFF5F8' }}
+      >
+        <i className='fas fa-lock' style={{ color: '#F64E60', fontSize: 36 }} />
+      </div>
+      <h3 className='font-weight-bolder text-dark mb-3'>
+        Esta convocatoria ya cerró
+      </h3>
+      <p className='text-muted mb-2' style={{ maxWidth: 420, margin: '0 auto 8px' }}>
+        El período de postulación para esta convocatoria ha finalizado.
+        Ya no es posible modificar tu selección de plaza.
+      </p>
+      <p className='text-muted font-size-sm mb-8' style={{ maxWidth: 420, margin: '0 auto 24px' }}>
+        Si deseas postular, revisa si hay una nueva convocatoria activa.
+      </p>
+      <button
+        className='btn btn-primary font-weight-bold px-8'
+        onClick={onVerConvocatorias}
+      >
+        <i className='fas fa-bullhorn mr-2' />
+        Ver convocatorias disponibles
+      </button>
+    </div>
+  </div>
+)
+
 // ════════════════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ════════════════════════════════════════════════════════════════════════════════
@@ -112,6 +139,10 @@ const SeleccionPlazaPage = () => {
   const [convocatoriaId, setConvocatoriaId] = useState(convocatoriaIdParam)
   const [postulacionId, setPostulacionId] = useState(postulacionIdParam)
   const [modoEditar, setModoEditar] = useState(modoEditarParam)
+
+  // ── NUEVO: Estado de convocatoria cerrada ───────────────────────────────
+  const [convocatoriaCerrada, setConvocatoriaCerrada] = useState(false)
+  const [mensajeCierre, setMensajeCierre] = useState('')
 
   // ── Estado wizard ─────────────────────────────────────────────────────────
   const [paso, setPaso] = useState(1)
@@ -172,7 +203,7 @@ const SeleccionPlazaPage = () => {
       ? caracteristicasActual.find(c => c.id === postulacionData.caracteristica_id) || null
       : null
 
-    if (!modalidadObj) return // IDs no coinciden con catálogo
+    if (!modalidadObj) return
 
     setSeleccion({
       modalidad: modalidadObj,
@@ -181,23 +212,75 @@ const SeleccionPlazaPage = () => {
       caracteristica: caractObj,
     })
 
-    if (espObj) setPaso(4)
-    else if (nivelObj) setPaso(3)
-    else setPaso(2)
+    //CAMBIO 1: Si tiene los 3 pasos → siempre ir a confirmación
+    // Si le falta especialidad → paso 3, si le falta nivel → paso 2
+    if (espObj) setPaso(4)        // tiene todo → confirmación
+    else if (nivelObj) setPaso(3) // le falta especialidad
+    else setPaso(2)               // le falta nivel
+  }
+  // ════════════════════════════════════════════════════════════════════════════
+  //HELPER — Verificar si la convocatoria está activa
+  // ════════════════════════════════════════════════════════════════════════════
+  const verificarConvocatoria = async (convId) => {
+    if (!convId) return true
+    try {
+      const res = await axios.get(
+        `${API_URL}/convocatorias/${convId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      const conv = res.data
+      const estadosCerrados = ['CERRADA', 'ANULADA', 'FINALIZADA']
+
+      // ✅ Flag explícito del backend (JSONResponse con cerrada: true)
+      if (conv.cerrada === true || estadosCerrados.includes(conv.estado)) {
+        setConvocatoriaCerrada(true)
+        setMensajeCierre(
+          conv.estado === 'ANULADA'
+            ? 'La convocatoria fue anulada.'
+            : `La convocatoria cerró el ${conv.fecha_fin_postulacion || 'fecha no disponible'}.`
+        )
+        return false
+      }
+
+      if (conv.fecha_fin_postulacion) {
+        const hoy = new Date()
+        hoy.setHours(0, 0, 0, 0)
+        const fechaCierre = new Date(conv.fecha_fin_postulacion)
+        fechaCierre.setHours(23, 59, 59, 999)
+        if (hoy > fechaCierre) {
+          setConvocatoriaCerrada(true)
+          setMensajeCierre(`El período de postulación cerró el ${conv.fecha_fin_postulacion}.`)
+          return false
+        }
+      }
+
+      return true
+
+    } catch (err) {
+      // ✅ FIX: 410 = convocatoria cerrada → bloquear wizard
+      if (
+        err.response?.status === 410 ||
+        err.response?.status === 403 ||
+        err.response?.status === 404
+      ) {
+        setConvocatoriaCerrada(true)
+        setMensajeCierre(
+          err.response?.data?.error ||
+          'Esta convocatoria ya no está disponible para postulaciones.'
+        )
+        return false
+      }
+      // Solo errores de red (500, timeout) → no bloquear
+      console.warn('No se pudo verificar estado de convocatoria:', err.message)
+      return true
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════════════
   // EFECTO 3 — Detectar y precargar postulación activa
-  //
-  //  CASO A: Botón "Modificar" → modoEditarParam=true + state.postulacion
-  //  CASO B: Botón "Postular"  → convocatoriaIdParam en URL
-  //  CASO C: Menú lateral      → sin nada (state null, search vacío)
-  //
-  //  FIX 1: Al encontrar postulación activa se actualiza convocatoriaId
-  //  FIX 2: Se activa modoEditar automáticamente si ya tiene plaza seleccionada
   // ════════════════════════════════════════════════════════════════════════════
   useEffect(() => {
-    if (cargando) return           // esperar a que cargue el catálogo
+    if (cargando) return
     if (catalogo.length === 0) return
     if (!token) return
 
@@ -206,51 +289,100 @@ const SeleccionPlazaPage = () => {
         // ── CASO A: Viene con postulación en state (botón Modificar) ──
         if (modoEditarParam && location.state?.postulacion) {
           const p = location.state.postulacion
-          if (p.convocatoria_id) setConvocatoriaId(String(p.convocatoria_id))
+          const convId = p.convocatoria_id ? String(p.convocatoria_id) : null
+
+          if (convId) {
+            const activa = await verificarConvocatoria(convId)
+            if (!activa) return
+          }
+
+          if (convId) setConvocatoriaId(convId)
           if (p.id) setPostulacionId(String(p.id))
           setModoEditar(true)
           precargarDesdePostulacion(p)
+          if (!p.modalidad_id) setPaso(4)
           return
         }
 
-        // ── CASO B y C: Buscar postulación activa via API ──
-        let convId = convocatoriaIdParam  // puede ser null (Caso C)
+        // ── CASO B: No viene convId por URL → buscar en mis-postulaciones ──
+        let convId = convocatoriaIdParam
+        let postId = postulacionIdParam
 
-        // CASO C: Sin convocatoria_id → buscar en mis postulaciones activas
         if (!convId) {
-          const resMis = await axios.get(
-            `${API_URL}/postulaciones/mis-postulaciones?estado=BORRADOR&limit=1`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          )
-          const items = resMis.data?.items || []
-          if (items.length === 0) return  // no tiene postulación → wizard vacío OK
-          convId = items[0].convocatoria_id
-          if (items[0].id) setPostulacionId(String(items[0].id))
-        }
-
-        // CASO B y C: Con convId, obtener la postulación completa
-        const res = await axios.get(
-          `${API_URL}/postulaciones/convocatoria/${convId}/mi-postulacion`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        )
-
-        if (res.data && res.data.id) {
-          // FIX 1: Actualizar convocatoriaId → desaparece la alerta
-          setConvocatoriaId(String(convId))
-
-          // FIX 2: Si ya tiene plaza → activar modo edición automático
-          if (res.data.plaza_seleccionada) {
-            setModoEditar(true)
-            setPostulacionId(String(res.data.id))
-            precargarDesdePostulacion(res.data)
+          // ✅ FIX: Primero buscar la convocatoria ACTIVA del sistema
+          try {
+            const resActiva = await axios.get(
+              `${API_URL}/convocatorias/activa`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            )
+            const convActiva = resActiva.data
+            if (!convActiva?.id) {
+              // ← AQUÍ: no hay activa → NO mostrar wizard
+              setConvocatoriaCerrada(true)
+              setMensajeCierre('No hay una convocatoria activa en este momento.')
+              return
+            }
+            // ... resto del código
+          } catch (errActiva) {
+            // 404 = no hay activa → tampoco mostrar wizard
+            if (errActiva.response?.status === 404) {
+              setConvocatoriaCerrada(true)
+              setMensajeCierre('No hay una convocatoria activa en este momento.')
+              return
+            }
+            setPaso(4)
+            return
           }
         }
 
-      } catch (err) {
-        // 404 = no tiene postulación previa → wizard vacío, es válido
-        if (err.response?.status !== 404) {
-          console.warn('Error buscando postulación activa:', err.message)
+        // ── CASO C: Viene convId por URL → verificar igual ──
+        if (convocatoriaIdParam) {
+          const activa = await verificarConvocatoria(String(convId))
+          if (!activa) return
         }
+
+        // ── Cargar postulación — convId ya verificado como activa ──
+        let res
+        try {
+          res = await axios.get(
+            `${API_URL}/postulaciones/convocatoria/${convId}/mi-postulacion`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          )
+        } catch (errPost) {
+          // ✅ 410 = convocatoria cerrada detectada en este endpoint
+          if (errPost.response?.status === 410) {
+            setConvocatoriaCerrada(true)
+            setMensajeCierre(
+              errPost.response?.data?.error ||
+              'Esta convocatoria ya no está disponible para postulaciones.'
+            )
+            return
+          }
+          // 404 = no tiene postulación aún → wizard vacío
+          if (errPost.response?.status === 404) {
+            setPaso(4)
+            return
+          }
+          // Cualquier otro error → wizard vacío con log
+          console.warn('Error cargando mi-postulacion:', errPost.message)
+          setPaso(4)
+          return
+        }
+
+        if (res.data && res.data.id) {
+          setConvocatoriaId(String(convId))
+          setPostulacionId(String(res.data.id))
+          setModoEditar(true)
+          precargarDesdePostulacion(res.data)
+          if (!res.data.modalidad_id) setPaso(4)
+        } else {
+          setPaso(4)
+        }
+
+      } catch (err) {
+        // Captura global — solo casos no manejados arriba
+        console.warn('Error inesperado en inicializar:', err.message)
+        setPaso(4)
       }
     }
 
@@ -297,6 +429,7 @@ const SeleccionPlazaPage = () => {
       })
       setNotaBilingue(res.data)
     } catch {
+      // 404 = sin notas bilingüe → no es error crítico, el wizard continúa
       setNotaBilingue(null)
     } finally {
       setCargandoNota(false)
@@ -330,7 +463,6 @@ const SeleccionPlazaPage = () => {
     setConvenioCodigoAnexo('')
   }
 
-  // ── Tipo característica ───────────────────────────────────────────────────
   const tipoCaracteristica = () => {
     if (!seleccion.caracteristica) return 'ESTATAL'
     const nombre = seleccion.caracteristica.nombre?.toUpperCase() || ''
@@ -345,85 +477,137 @@ const SeleccionPlazaPage = () => {
   const confirmarPostulacion = async () => {
     if (!convocatoriaId) {
       Swal.fire({
-        icon: 'error',
+        icon: 'warning',
         title: 'Sin convocatoria',
-        text: 'No se encontró la convocatoria. Regresa a Convocatorias y vuelve a intentarlo.',
-        confirmButtonText: 'Ir a Convocatorias',
-        confirmButtonColor: '#3699FF',
-      }).then(() => history.push('/convocatorias'))
+        text: 'No hay una convocatoria activa. Vuelve a la lista de convocatorias.',
+        confirmButtonColor: '#F64E60',
+      })
       return
     }
 
-    if (tipoCaracteristica() === 'CONVENIO') {
-      if (!convenioArchivo || !convenioCodigoAnexo.trim()) {
-        Swal.fire({
-          icon: 'warning',
-          title: 'Datos incompletos',
-          text: 'Debes subir el documento de convenio y el código de anexo.',
-        })
+    if (!seleccion.modalidad || !seleccion.nivel || !seleccion.especialidad) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Selección incompleta',
+        text: 'Debes completar los 3 pasos: Modalidad, Nivel y Especialidad.',
+        confirmButtonColor: '#3699FF',
+      })
+      return
+    }
+
+    const esConvenio = seleccion.caracteristica?.nombre?.toUpperCase().includes('CONVEN')
+    if (esConvenio) {
+      if (!convenioCodigoAnexo?.trim()) {
+        Swal.fire({ icon: 'warning', title: 'Código de anexo requerido', text: 'Debes ingresar el código de anexo del convenio.', confirmButtonColor: '#3699FF' })
+        return
+      }
+      if (!convenioArchivo) {
+        Swal.fire({ icon: 'warning', title: 'Documento requerido', text: 'Debes subir el documento del convenio.', confirmButtonColor: '#3699FF' })
         return
       }
     }
 
     setEnviando(true)
+
     try {
-      const headers = {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      }
       const payload = {
-        convocatoria_id: parseInt(convocatoriaId),
+        convocatoria_id: convocatoriaId,
         modalidad_id: seleccion.modalidad.id,
         nivel_id: seleccion.nivel.id,
         especialidad_id: seleccion.especialidad.id,
         caracteristica_id: seleccion.caracteristica?.id || null,
       }
 
-      let res
+      let postulacionData
+
       if (modoEditar && postulacionId) {
-        res = await axios.patch(
-          `${API_URL}/postulaciones/${postulacionId}/plaza`,
-          payload,
-          { headers }
+        const resp = await fetch(
+          `${API_URL}/postulaciones/${postulacionId}/seleccion-plaza`,
+          {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              modalidad_id: seleccion.modalidad.id,
+              nivel_id: seleccion.nivel.id,
+              especialidad_id: seleccion.especialidad.id,
+            }),
+          }
         )
+        const data = await resp.json()
+
+        // Detectar error de convocatoria cerrada desde el backend
+        if (!resp.ok) {
+          const detalle = data.detail || 'Error al actualizar la plaza'
+          const esCierre = detalle.toLowerCase().includes('cerr') ||
+            detalle.toLowerCase().includes('anulad') ||
+            detalle.toLowerCase().includes('período')
+
+          if (esCierre) {
+            setConvocatoriaCerrada(true)
+            setMensajeCierre(detalle)
+            return
+          }
+          throw new Error(detalle)
+        }
+        postulacionData = { id: postulacionId, ...data }
+
       } else {
-        res = await axios.post(`${API_URL}/postulaciones/`, payload, { headers })
+        const resp = await fetch(`${API_URL}/postulaciones/`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        const data = await resp.json()
+        if (!resp.ok) throw new Error(data.detail || 'Error al crear la postulación')
+        postulacionData = data
       }
 
-      // Subir documento convenio si aplica
-      if (tipoCaracteristica() === 'CONVENIO' && convenioArchivo) {
+      if (esConvenio && convenioArchivo && postulacionData?.id) {
         const formData = new FormData()
         formData.append('archivo', convenioArchivo)
         formData.append('codigo_anexo', convenioCodigoAnexo)
-        await axios.post(
-          `${API_URL}/postulaciones/${res.data.id}/convenio`,
-          formData,
-          { headers: { Authorization: `Bearer ${token}` } }
+        const respConv = await fetch(
+          `${API_URL}/postulaciones/${postulacionData.id}/convenio`,
+          { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData }
         )
+        if (!respConv.ok) {
+          const errConv = await respConv.json()
+          throw new Error(errConv.detail || 'Error al subir el documento de convenio')
+        }
       }
 
       await Swal.fire({
         icon: 'success',
-        title: modoEditar ? 'Selección actualizada' : 'Plaza seleccionada',
+        title: modoEditar ? '¡Plaza actualizada!' : '¡Postulación creada!',
         html: `
-                    <p>${modoEditar
-            ? 'Tu selección de plaza fue actualizada correctamente.'
-            : 'Tu postulación fue creada correctamente.'
-          }</p>
-                    <p><strong>Código:</strong> ${res.data.codigo || '—'}</p>
-                    <p style="color:#7E8299;font-size:13px">
-                        Ahora debes subir tus documentos obligatorios.
-                    </p>
-                `,
-        confirmButtonText: 'Ver documentos',
-        confirmButtonColor: '#3699FF',
+          <p style="color:#3F4254;margin-bottom:12px">
+            ${modoEditar ? 'Tu selección de plaza fue actualizada.' : 'Tu postulación fue registrada exitosamente.'}
+          </p>
+          <div style="background:#F3F6F9;border-radius:8px;padding:12px;text-align:left">
+            <div style="font-size:13px;color:#3F4254;line-height:1.8">
+              <strong>Modalidad:</strong> ${seleccion.modalidad.nombre}<br/>
+              <strong>Nivel:</strong> ${seleccion.nivel.nombre}<br/>
+              <strong>Especialidad:</strong> ${seleccion.especialidad.nombre}
+              ${seleccion.caracteristica ? `<br/><strong>Característica:</strong> ${seleccion.caracteristica.nombre}` : ''}
+            </div>
+          </div>
+          <p style="margin-top:12px;font-size:12px;color:#7E8299">
+            Ahora sube los documentos requeridos para completar tu expediente.
+          </p>
+        `,
+        confirmButtonColor: '#1BC5BD',
+        confirmButtonText: 'Ir a documentos',
       })
 
-      history.push(`/postulaciones/${res.data.id}/documentos`)
+      history.push('/mis-postulaciones')
 
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Ocurrió un error al procesar la postulación.'
-      Swal.fire({ icon: 'error', title: 'Error', text: msg })
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.message || 'Ocurrió un error inesperado.',
+        confirmButtonColor: '#F64E60',
+      })
     } finally {
       setEnviando(false)
     }
@@ -458,9 +642,118 @@ const SeleccionPlazaPage = () => {
     )
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // RENDER PRINCIPAL
-  // ════════════════════════════════════════════════════════════════════════════
+  // ── Banner: Sin convocatoria activa / Convocatoria cerrada ────────────────────
+  const BannerSinConvocatoria = ({ mensaje, onVerConvocatorias }) => {
+    const esSinActiva = mensaje?.toLowerCase().includes('no hay')
+
+    return (
+      <div className='card card-custom'>
+        <div className='card-body p-10 text-center'>
+          <div
+            className='d-flex align-items-center justify-content-center rounded-circle mx-auto mb-6'
+            style={{
+              width: 80, height: 80,
+              background: esSinActiva ? '#E8FFF3' : '#FFF5F8',
+            }}
+          >
+            <i
+              className={`fas ${esSinActiva ? 'fa-hourglass-half' : 'fa-lock'}`}
+              style={{
+                color: esSinActiva ? '#1BC5BD' : '#F64E60',
+                fontSize: 36,
+              }}
+            />
+          </div>
+
+          <h3 className='font-weight-bolder text-dark mb-3'>
+            {esSinActiva
+              ? 'No hay plaza disponible aún'
+              : 'Esta convocatoria ya cerró'}
+          </h3>
+
+          <p className='text-muted mb-2' style={{ maxWidth: 440, margin: '0 auto 8px' }}>
+            {esSinActiva
+              ? 'Actualmente no hay ninguna convocatoria abierta. Cuando se aperture una nueva convocatoria podrás seleccionar tu plaza desde aquí.'
+              : 'El período de postulación para esta convocatoria ha finalizado. Ya no es posible modificar tu selección de plaza.'}
+          </p>
+
+          {esSinActiva ? (
+            <div
+              className='d-inline-flex align-items-center rounded px-4 py-2 mb-6 mt-3'
+              style={{ background: '#E8FFF3', border: '1px solid #1BC5BD' }}
+            >
+              <i className='fas fa-bell mr-2' style={{ color: '#1BC5BD' }} />
+              <span className='font-size-sm font-weight-bold' style={{ color: '#1BC5BD' }}>
+                Vuelve cuando se anuncie una nueva convocatoria
+              </span>
+            </div>
+          ) : (
+            <p className='text-muted font-size-sm mb-6' style={{ maxWidth: 420, margin: '0 auto 24px' }}>
+              Si deseas postular, revisa si hay una nueva convocatoria activa.
+            </p>
+          )}
+
+          <div className='mt-2'>
+            <button
+              className='btn btn-primary font-weight-bold px-8'
+              onClick={onVerConvocatorias}
+            >
+              <i className='fas fa-bullhorn mr-2' />
+              Ver convocatorias disponibles
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // RENDER: Convocatoria cerrada / sin activa → mostrar banner, NO el wizard
+  // ════════════════════════════════════════════════════════════════════════════════
+  if (convocatoriaCerrada) {
+    const esSinActiva = mensajeCierre?.toLowerCase().includes('no hay')
+    return (
+      <div className='container-fluid px-0'>
+        {/* Header informativo */}
+        <div className='card card-custom mb-7' style={{ background: HEADER_GRADIENT, border: 'none' }}>
+          <div className='card-body py-8 px-8'>
+            <div className='d-flex align-items-center' style={{ gap: 12 }}>
+              <div>
+                <h2 className='text-white font-weight-bolder mb-1'>
+                  Selección de Plaza
+                </h2>
+                <p className='text-white mb-0' style={{ opacity: 0.7 }}>
+                  {esSinActiva
+                    ? 'Esperando apertura de nueva convocatoria.'
+                    : mensajeCierre || 'Esta convocatoria ya no está disponible.'}
+                </p>
+              </div>
+              <span
+                className='label label-inline label-lg font-weight-bold ml-4'
+                style={{
+                  background: esSinActiva ? '#1BC5BD' : '#F64E60',
+                  color: '#fff',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <i className={`fas ${esSinActiva ? 'fa-hourglass-half' : 'fa-lock'} mr-1`} />
+                {esSinActiva ? 'Sin convocatoria activa' : 'Convocatoria cerrada'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <BannerSinConvocatoria
+          mensaje={mensajeCierre}
+          onVerConvocatorias={() => history.push('/convocatorias-publicas')}
+        />
+      </div>
+    )
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // RENDER PRINCIPAL — Wizard normal
+  // ════════════════════════════════════════════════════════════════════════════════
   return (
     <div className='container-fluid px-0'>
 
@@ -490,7 +783,6 @@ const SeleccionPlazaPage = () => {
               </p>
             </div>
 
-            {/* Resumen en header */}
             <div className='d-none d-md-flex align-items-center flex-wrap' style={{ gap: 8 }}>
               {seleccion.modalidad && (
                 <span className='label label-inline label-lg font-weight-bold'
@@ -539,29 +831,7 @@ const SeleccionPlazaPage = () => {
         </div>
       )}
 
-      {/* ── Sin convocatoria — SOLO se muestra si convocatoriaId es null ── */}
-      {!convocatoriaId && (
-        <div className='rounded p-4 mb-5 d-flex align-items-center'
-          style={{ background: '#FFF4DE', borderLeft: '4px solid #FFA800' }}>
-          <i className='fas fa-exclamation-triangle mr-3' style={{ color: '#FFA800', fontSize: 18 }} />
-          <div>
-            <div className='font-weight-bold' style={{ color: '#FFA800', fontSize: 13 }}>
-              Sin convocatoria seleccionada
-            </div>
-            <div className='text-muted font-size-sm'>
-              Regresa a{' '}
-              <span
-                className='text-primary font-weight-bold'
-                style={{ cursor: 'pointer' }}
-                onClick={() => history.push('/convocatorias')}
-              >
-                Convocatorias
-              </span>
-              {' '}y usa el botón Postular.
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── ELIMINADO: bloque "Sin convocatoria" que aparecía en el wizard ── */}
 
       <div className='row'>
 
@@ -794,7 +1064,7 @@ const SeleccionPlazaPage = () => {
                   </h6>
                   <div className='row mb-5'>
 
-                    {/* 1 — ESTATAL (siempre visible, no suma nada) */}
+                    {/* ESTATAL */}
                     <div className='col-md-4 mb-3'>
                       <div
                         className='border rounded p-4 text-center'
@@ -822,7 +1092,7 @@ const SeleccionPlazaPage = () => {
                       </div>
                     </div>
 
-                    {/* 2 — BILINGÜE (si existe en BD) */}
+                    {/* BILINGÜE */}
                     {caracteristicas
                       .filter(c => c.nombre?.toUpperCase().includes('BILING'))
                       .map((caract) => {
@@ -853,21 +1123,9 @@ const SeleccionPlazaPage = () => {
                         )
                       })}
 
-                    {/* 3 — CONVENIO (si existe en BD) */}
+                    {/* CONVENIO */}
                     {caracteristicas
-                      .filter(c => {
-                        const n = c.nombre?.toUpperCase() || ''
-                        console.log('🔍 Características cargadas:', caracteristicas.map(c => ({
-                          id: c.id,
-                          nombre: c.nombre,
-                          activo: c.activo
-                        })))
-                        return (
-                          n.includes('CONVEN') ||
-                          n.includes('CONVENIO') ||
-                          n === 'CONVENIO'
-                        )
-                      })
+                      .filter(c => c.nombre?.toUpperCase().includes('CONVEN'))
                       .map((caract) => {
                         const seleccionado = seleccion.caracteristica?.id === caract.id
                         return (
@@ -897,7 +1155,7 @@ const SeleccionPlazaPage = () => {
                       })}
                   </div>
 
-                  {/* ── Panel Bilingüe — notas de lengua originaria ── */}
+                  {/* Panel Bilingüe */}
                   {tipoCaracteristica() === 'BILINGUE' && (
                     <div className='rounded p-5 mb-5'
                       style={{ background: '#EEE5FF', borderLeft: '4px solid #8950FC' }}>
@@ -933,7 +1191,7 @@ const SeleccionPlazaPage = () => {
                     </div>
                   )}
 
-                  {/* ── Panel Convenio — subida de documento ── */}
+                  {/* Panel Convenio */}
                   {tipoCaracteristica() === 'CONVENIO' && (
                     <div className='rounded p-5 mb-5'
                       style={{ background: '#FFF4DE', borderLeft: '4px solid #FFA800' }}>
@@ -941,8 +1199,6 @@ const SeleccionPlazaPage = () => {
                         <i className='fas fa-handshake mr-2' />
                         Documentación de convenio requerida
                       </div>
-
-                      {/* Código de anexo */}
                       <div className='form-group mb-4'>
                         <label className='font-weight-bold font-size-sm'>
                           Código de anexo <span className='text-danger'>*</span>
@@ -952,14 +1208,9 @@ const SeleccionPlazaPage = () => {
                           className='form-control mt-1'
                           placeholder='Ej: CONV-2026-001'
                           value={convenioCodigoAnexo}
-                          onChange={(e) => {
-                            const val = e.target.value
-                            setConvenioCodigoAnexo(val)
-                          }}
+                          onChange={(e) => setConvenioCodigoAnexo(e.target.value)}
                         />
                       </div>
-
-                      {/* Subida de archivo */}
                       <div className='form-group mb-0'>
                         <label className='font-weight-bold font-size-sm'>
                           Documento de convenio <span className='text-danger'>*</span>
@@ -986,12 +1237,8 @@ const SeleccionPlazaPage = () => {
                             <div className='d-flex align-items-center justify-content-center' style={{ gap: 10 }}>
                               <i className='fas fa-file-alt' style={{ color: '#FFA800', fontSize: 24 }} />
                               <div className='text-left'>
-                                <div className='font-weight-bold text-dark font-size-sm'>
-                                  {convenioArchivo.name}
-                                </div>
-                                <div className='text-muted font-size-xs'>
-                                  {(convenioArchivo.size / 1024 / 1024).toFixed(2)} MB
-                                </div>
+                                <div className='font-weight-bold text-dark font-size-sm'>{convenioArchivo.name}</div>
+                                <div className='text-muted font-size-xs'>{(convenioArchivo.size / 1024 / 1024).toFixed(2)} MB</div>
                               </div>
                               <button
                                 className='btn btn-icon btn-sm btn-light-danger ml-3'
@@ -1000,7 +1247,6 @@ const SeleccionPlazaPage = () => {
                                   setConvenioArchivo(null)
                                   if (fileInputRef.current) fileInputRef.current.value = ''
                                 }}
-                                title='Quitar archivo'
                               >
                                 <i className='fas fa-times' style={{ fontSize: 12 }} />
                               </button>
@@ -1011,15 +1257,11 @@ const SeleccionPlazaPage = () => {
                               <div className='font-weight-bold text-muted font-size-sm'>
                                 Haz clic para seleccionar el documento
                               </div>
-                              <div className='text-muted font-size-xs mt-1'>
-                                PDF, JPG o PNG — máx. 5 MB
-                              </div>
+                              <div className='text-muted font-size-xs mt-1'>PDF, JPG o PNG — máx. 5 MB</div>
                             </>
                           )}
                         </div>
                       </div>
-
-                      {/* Aviso campos incompletos */}
                       {(!convenioArchivo || !convenioCodigoAnexo.trim()) && (
                         <div className='d-flex align-items-center mt-3'>
                           <i className='fas fa-exclamation-circle mr-2' style={{ color: '#FFA800', fontSize: 13 }} />
@@ -1031,7 +1273,7 @@ const SeleccionPlazaPage = () => {
                     </div>
                   )}
 
-                  {/* ── Botón confirmar / guardar ── */}
+                  {/* Botón confirmar */}
                   <button
                     className='btn btn-primary btn-block font-weight-bold py-4'
                     style={{ borderRadius: 8, fontSize: 15 }}
@@ -1051,13 +1293,6 @@ const SeleccionPlazaPage = () => {
                     )}
                   </button>
 
-                  {/* Aviso si botón deshabilitado por falta de convocatoria */}
-                  {!convocatoriaId && (
-                    <p className='text-muted font-size-xs text-center mt-3'>
-                      <i className='fas fa-info-circle mr-1' />
-                      El botón se habilitará automáticamente cuando se detecte tu convocatoria activa.
-                    </p>
-                  )}
                 </div>
               )}
 
@@ -1070,9 +1305,7 @@ const SeleccionPlazaPage = () => {
           <div className='card card-custom'>
             <div className='card-header'>
               <div className='card-title'>
-                <h3 className='card-label font-weight-bolder font-size-sm'>
-                  Tu selección
-                </h3>
+                <h3 className='card-label font-weight-bolder font-size-sm'>Tu selección</h3>
               </div>
             </div>
             <div className='card-body p-6'>
@@ -1144,11 +1377,9 @@ const SeleccionPlazaPage = () => {
                   className='d-flex align-items-center justify-content-center rounded mr-3'
                   style={{
                     width: 36, height: 36, flexShrink: 0,
-                    background: seleccion.caracteristica
-                      ? tipoCaracteristica() === 'BILINGUE' ? '#EEE5FF'
-                        : tipoCaracteristica() === 'CONVENIO' ? '#FFF4DE'
-                          : '#E8FFF3'
-                      : '#E8FFF3',
+                    background: tipoCaracteristica() === 'BILINGUE' ? '#EEE5FF'
+                      : tipoCaracteristica() === 'CONVENIO' ? '#FFF4DE'
+                        : '#E8FFF3',
                   }}
                 >
                   <i
@@ -1206,28 +1437,6 @@ const SeleccionPlazaPage = () => {
                   <div className='text-muted font-size-xs'>
                     Cambia tu selección y presiona{' '}
                     <strong>Guardar cambios</strong> cuando termines.
-                  </div>
-                </div>
-              )}
-
-              {/* Alerta sin convocatoria */}
-              {!convocatoriaId && (
-                <div className='rounded p-3 mt-5'
-                  style={{ background: '#FFF4DE', borderLeft: '3px solid #FFA800' }}>
-                  <div className='font-weight-bold font-size-xs mb-1' style={{ color: '#FFA800' }}>
-                    <i className='fas fa-exclamation-triangle mr-1' />
-                    Sin convocatoria seleccionada
-                  </div>
-                  <div className='text-muted font-size-xs'>
-                    Regresa a{' '}
-                    <span
-                      className='text-primary font-weight-bold'
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => history.push('/convocatorias')}
-                    >
-                      Convocatorias
-                    </span>
-                    {' '}y usa el botón Postular.
                   </div>
                 </div>
               )}

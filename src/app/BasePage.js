@@ -6,14 +6,16 @@ import { BuilderPage } from "./pages/BuilderPage";
 import { MyPage } from "./pages/MyPage";
 import DashboardPage from "./pages/DashboardPage";
 import MiPerfilPage from "./pages/MiPerfilPage";
-import ConvocatoriasPage from "./pages/ConvocatoriasPage";
 import ConvocatoriasPublicasPage from "./pages/ConvocatoriasPublicasPage";
 import SeleccionPlazaPage from "./pages/SeleccionPlazaPage";
 import MisPostulacionesPage from "./pages/MisPostulacionesPage";
 import ReportesConvocatoriaPage from './pages/ReportesConvocatoriaPage'
 import GestionUsuarios from './pages/GestionUsuarios'
-import CrearConvocatoriaPage from './pages/CrearConvocatoriaPage'
-import CatalogoPanelPage from './pages/admin/CatalogoPanelPage'  // ← NUEVO
+
+// ── Admin ────────────────────────────────────────────────────────────────────
+import ConvocatoriasPage from './pages/admin/ConvocatoriasPage'
+import CrearConvocatoriaPage from './pages/admin/CrearConvocatoriaPage'
+import CatalogoPanelPage from './pages/admin/CatalogoPanelPage'
 
 const GoogleMaterialPage = lazy(() =>
   import("./modules/GoogleMaterialExamples/GoogleMaterialPage")
@@ -32,7 +34,17 @@ export default function BasePage() {
   const history = useHistory();
   const auth = useSelector((state) => state.auth);
   const user = auth?.user || {};
-  const roleNivel = user?.role_nivel || 5;
+
+  // ✅ Fix definitivo — cubre hidratación tardía de Redux
+  const roleNivel = Number(
+    user?.role_nivel ??
+    user?.nivel ??
+    user?.role?.nivel ??
+    5
+  );
+
+  console.log("🔍 roleNivel resuelto:", roleNivel, "| keys del user:", Object.keys(user))
+
 
   useEffect(() => {
     if (!user || Object.keys(user).length === 0) return;
@@ -45,54 +57,65 @@ export default function BasePage() {
   return (
     <Suspense fallback={<LayoutSplashScreen />}>
       <Switch>
-        {/* Mi Perfil */}
+
+        {/* ── Perfil e Inicio ── */}
         <ContentRoute path="/mi-perfil" component={MiPerfilPage} />
-
-        {/* Inicio */}
         <Redirect exact from="/" to="/mi-perfil" />
-
-        {/* Dashboard */}
         <ContentRoute path="/dashboard" component={DashboardPage} />
 
-        {/* Selección de Plaza */}
+        {/* ── Docente ── */}
         <ContentRoute path="/seleccion-plaza" component={SeleccionPlazaPage} />
-
-        {/* Mis Postulaciones — docentes */}
         <ContentRoute path="/mis-postulaciones" component={MisPostulacionesPage} />
 
-        {/* Panel de Catálogo — SuperAdmin */}
+        {/* ✅ CRÍTICO: /convocatorias/publicas SIEMPRE antes de /convocatorias */}
+        {/* ── Vista Docente ── */}
         <Route
-          path="/admin/catalogo"
-          exact
-          render={(props) => {
-            if (roleNivel === 1) {
-              return <CatalogoPanelPage {...props} />
-            }
-            return <Redirect to="/dashboard" />
-          }}
+          path="/convocatorias/publicas"
+          render={(props) =>
+            roleNivel === 5
+              ? <ConvocatoriasPublicasPage {...props} />
+              : <Redirect to="/convocatorias" />
+          }
         />
 
-        {/* Convocatorias - Gestión admin */}
+        {/* ── Vista Admin/SuperAdmin ── */}
         <Route
           path="/convocatorias"
           exact
-          render={(props) => {
-            if (roleNivel === 1 || roleNivel === 2) {
-              return <ConvocatoriasPage {...props} />;
-            }
-            return <Redirect to="/convocatorias/publicas" />;
-          }}
+          render={(props) =>
+            roleNivel === 1 || roleNivel === 2
+              ? <ConvocatoriasPage {...props} />
+              : <Redirect to="/convocatorias/publicas" />
+          }
         />
 
-        {/* Convocatorias públicas - docentes */}
+        {/* ── Admin: Crear Convocatoria ── */}
         <Route
-          path="/convocatorias/publicas"
-          component={ConvocatoriasPublicasPage}
+          path="/crear-convocatoria"
+          exact
+          render={(props) =>
+            roleNivel === 1 || roleNivel === 2
+              ? <CrearConvocatoriaPage {...props} />
+              : <Redirect to="/convocatorias" />
+          }
         />
 
+        {/* ── Admin: Catálogo ── */}
+        <Route
+          path="/admin/catalogo"
+          exact
+          render={(props) =>
+            roleNivel === 1
+              ? <CatalogoPanelPage {...props} />
+              : <Redirect to="/dashboard" />
+          }
+        />
+
+        {/* ── Reportes y Usuarios ── */}
         <ContentRoute path="/reportes/convocatorias" component={ReportesConvocatoriaPage} />
         <ContentRoute path="/usuarios" component={GestionUsuarios} />
-        <ContentRoute path="/crear-convocatoria" component={CrearConvocatoriaPage} />
+
+        {/* ── Metronic ── */}
         <ContentRoute path="/builder" component={BuilderPage} />
         <ContentRoute path="/my-page" component={MyPage} />
         <Route path="/google-material" component={GoogleMaterialPage} />
@@ -100,7 +123,6 @@ export default function BasePage() {
         <Route path="/e-commerce" component={ECommercePage} />
         <Route path="/user-profile" component={UserProfilepage} />
 
-        {/* Página de error si la ruta no existe */}
         <Redirect to="/error/error-v1" />
       </Switch>
     </Suspense>
