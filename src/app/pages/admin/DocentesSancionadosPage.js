@@ -326,24 +326,84 @@ const DocentesSancionadosPage = () => {
                 activo: form.activo,
             };
 
+            let cuentaDesactivada = false;
+            let cuentaReactivada = false;
+
             if (seleccionado) {
-                await axios.put(`${API_URL}/sanciones/${seleccionado.id}`, payload, { headers: headers() });
+                // ── Actualizar sanción existente ──────────────────────────────
+                await axios.put(
+                    `${API_URL}/sanciones/${seleccionado.id}`,
+                    payload,
+                    { headers: headers() }
+                );
             } else {
-                await axios.post(`${API_URL}/sanciones/`, payload, { headers: headers() });
+                // ── Crear nueva sanción ───────────────────────────────────────
+                const res = await axios.post(
+                    `${API_URL}/sanciones/`,
+                    payload,
+                    { headers: headers() }
+                );
+                cuentaDesactivada = res.data?.cuenta_desactivada ?? false;
             }
+
+            // ── Swal de éxito con aviso de cuenta si aplica ───────────────────
+            const esNuevo = !seleccionado;
 
             await Swal.fire({
                 icon: "success",
                 title: seleccionado ? "Registro actualizado" : "Sanción registrada",
-                text: `${form.nombres} fue ${seleccionado ? "actualizado" : "registrado"} correctamente.`,
+                html: `
+                <p style="margin-bottom:${(esNuevo && cuentaDesactivada) ? "12px" : "0"}">
+                    <strong>${form.nombres}</strong> fue
+                    ${seleccionado ? "actualizado" : "registrado"} correctamente.
+                </p>
+                ${esNuevo && cuentaDesactivada ? `
+                    <div style="
+                        background: #FFF4DE;
+                        border: 1px solid #FFA800;
+                        border-radius: 8px;
+                        padding: 10px 14px;
+                        display: flex;
+                        align-items: flex-start;
+                        gap: 10px;
+                        text-align: left;
+                        font-size: 13px;
+                    ">
+                        <i class="fas fa-user-lock" style="color:#FFA800; margin-top:2px; flex-shrink:0"></i>
+                        <div>
+                            <strong style="color:#856404; display:block; margin-bottom:2px">
+                                Cuenta desactivada automáticamente
+                            </strong>
+                            <span style="color:#856404">
+                                El docente no podrá iniciar sesión hasta que se levante la sanción.
+                            </span>
+                        </div>
+                    </div>
+                ` : ""}
+            `,
                 confirmButtonColor: "#3699FF",
+                confirmButtonText: "Entendido",
             });
 
             limpiarPanel();
             cargarLista(busqueda, page);
+
         } catch (err) {
-            const msg = err.response?.data?.detail || "Error al guardar el registro.";
-            Swal.fire({ icon: "error", title: "Error", text: msg, confirmButtonColor: "#F64E60" });
+            const detail = err.response?.data?.detail;
+
+            // El backend puede devolver detail como string u objeto
+            const msg = typeof detail === "string"
+                ? detail
+                : typeof detail === "object" && detail?.mensaje
+                    ? detail.mensaje
+                    : "Error al guardar el registro.";
+
+            Swal.fire({
+                icon: "error",
+                title: "Error",
+                text: msg,
+                confirmButtonColor: "#F64E60",
+            });
         } finally {
             setGuardando(false);
         }

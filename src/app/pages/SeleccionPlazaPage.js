@@ -203,8 +203,6 @@ const SeleccionPlazaPage = () => {
       ? caracteristicasActual.find(c => c.id === postulacionData.caracteristica_id) || null
       : null
 
-    if (!modalidadObj) return
-
     setSeleccion({
       modalidad: modalidadObj,
       nivel: nivelObj,
@@ -212,11 +210,19 @@ const SeleccionPlazaPage = () => {
       caracteristica: caractObj,
     })
 
-    //CAMBIO 1: Si tiene los 3 pasos → siempre ir a confirmación
-    // Si le falta especialidad → paso 3, si le falta nivel → paso 2
-    if (espObj) setPaso(4)        // tiene todo → confirmación
-    else if (nivelObj) setPaso(3) // le falta especialidad
-    else setPaso(2)               // le falta nivel
+    // ✅ CAMBIO 1: Eliminado el "if (!modalidadObj) return" temprano
+    // Ahora sí asigna la selección aunque no haya modalidad (limpia el estado)
+
+    // ✅ CAMBIO 2: Si no tiene ni modalidad → paso 1 (primera vez real)
+    if (espObj && nivelObj && modalidadObj) {
+      setPaso(4)        // Tiene todo → confirmación
+    } else if (nivelObj && modalidadObj) {
+      setPaso(3)        // Tiene modalidad + nivel → falta especialidad
+    } else if (modalidadObj) {
+      setPaso(2)        // Tiene modalidad → falta nivel
+    } else {
+      setPaso(1)        // ✅ Sin datos → primera vez → desde el inicio
+    }
   }
   // ════════════════════════════════════════════════════════════════════════════
   //HELPER — Verificar si la convocatoria está activa
@@ -286,7 +292,10 @@ const SeleccionPlazaPage = () => {
 
     const inicializar = async () => {
       try {
-        // ── CASO A: Viene con postulación en state (botón Modificar) ──
+
+        // ══════════════════════════════════════════════════════════════
+        // CASO A: Viene con postulación en state (botón "Modificar")
+        // ══════════════════════════════════════════════════════════════
         if (modoEditarParam && location.state?.postulacion) {
           const p = location.state.postulacion
           const convId = p.convocatoria_id ? String(p.convocatoria_id) : null
@@ -294,100 +303,148 @@ const SeleccionPlazaPage = () => {
           if (convId) {
             const activa = await verificarConvocatoria(convId)
             if (!activa) return
+            setConvocatoriaId(convId)
           }
 
-          if (convId) setConvocatoriaId(convId)
           if (p.id) setPostulacionId(String(p.id))
           setModoEditar(true)
           precargarDesdePostulacion(p)
-          if (!p.modalidad_id) setPaso(4)
           return
         }
 
-        // ── CASO B: No viene convId por URL → buscar en mis-postulaciones ──
-        let convId = convocatoriaIdParam
-        let postId = postulacionIdParam
+        // ══════════════════════════════════════════════════════════════
+        // CASO B: Viene con convocatoria_id explícito por URL
+        // (botón "Postular" desde ConvocatoriasDisponibles)
+        // ══════════════════════════════════════════════════════════════
+        if (convocatoriaIdParam) {
+          const activa = await verificarConvocatoria(String(convocatoriaIdParam))
+          if (!activa) return
 
-        if (!convId) {
-          // ✅ FIX: Primero buscar la convocatoria ACTIVA del sistema
+          // Verificar si ya tiene postulación en esta convocatoria
           try {
-            const resActiva = await axios.get(
-              `${API_URL}/convocatorias/activa`,
+            const res = await axios.get(
+              `${API_URL}/postulaciones/convocatoria/${convocatoriaIdParam}/mi-postulacion`,
               { headers: { Authorization: `Bearer ${token}` } }
             )
-            const convActiva = resActiva.data
-            if (!convActiva?.id) {
-              // ← AQUÍ: no hay activa → NO mostrar wizard
-              setConvocatoriaCerrada(true)
-              setMensajeCierre('No hay una convocatoria activa en este momento.')
+
+            if (res.data?.id) {
+              // Ya tiene postulación → precargar y decidir paso según datos
+              setConvocatoriaId(String(convocatoriaIdParam))
+              setPostulacionId(String(res.data.id))
+              setModoEditar(true)
+              precargarDesdePostulacion(res.data)
+            } else {
+              // Respuesta vacía → primera vez → paso 1
+              setConvocatoriaId(String(convocatoriaIdParam))
+              setPaso(1)
+            }
+
+          } catch (errPost) {
+            if (errPost.response?.status === 404) {
+              // ✅ Primera vez en esta convocatoria → paso 1 desde el inicio
+              setConvocatoriaId(String(convocatoriaIdParam))
+              setPaso(1)
               return
             }
-            // ... resto del código
-          } catch (errActiva) {
-            // 404 = no hay activa → tampoco mostrar wizard
-            if (errActiva.response?.status === 404) {
+            if (errPost.response?.status === 410) {
               setConvocatoriaCerrada(true)
-              setMensajeCierre('No hay una convocatoria activa en este momento.')
+              setMensajeCierre(
+                errPost.response?.data?.error ||
+                'Esta convocatoria ya no está disponible.'
+              )
               return
             }
-            setPaso(4)
-            return
+            // Error de red u otro → igual dejar en paso 1 con convId asignado
+            console.warn('Error cargando mi-postulacion:', errPost.message)
+            setConvocatoriaId(String(convocatoriaIdParam))
+            setPaso(1)
           }
-        }
-
-        // ── CASO C: Viene convId por URL → verificar igual ──
-        if (convocatoriaIdParam) {
-          const activa = await verificarConvocatoria(String(convId))
-          if (!activa) return
-        }
-
-        // ── Cargar postulación — convId ya verificado como activa ──
-        let res
-        try {
-          res = await axios.get(
-            `${API_URL}/postulaciones/convocatoria/${convId}/mi-postulacion`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          )
-        } catch (errPost) {
-          // ✅ 410 = convocatoria cerrada detectada en este endpoint
-          if (errPost.response?.status === 410) {
-            setConvocatoriaCerrada(true)
-            setMensajeCierre(
-              errPost.response?.data?.error ||
-              'Esta convocatoria ya no está disponible para postulaciones.'
-            )
-            return
-          }
-          // 404 = no tiene postulación aún → wizard vacío
-          if (errPost.response?.status === 404) {
-            setPaso(4)
-            return
-          }
-          // Cualquier otro error → wizard vacío con log
-          console.warn('Error cargando mi-postulacion:', errPost.message)
-          setPaso(4)
           return
         }
 
-        if (res.data && res.data.id) {
-          setConvocatoriaId(String(convId))
-          setPostulacionId(String(res.data.id))
-          setModoEditar(true)
-          precargarDesdePostulacion(res.data)
-          if (!res.data.modalidad_id) setPaso(4)
-        } else {
-          setPaso(4)
+        // ══════════════════════════════════════════════════════════════
+        // CASO C: El docente entró directo al menú "Selección de Plaza"
+        // SIN venir de una convocatoria ni de "Modificar"
+        // → NO mostrar wizard. Verificar qué mostrarle.
+        // ══════════════════════════════════════════════════════════════
+
+        // Primero verificar si hay convocatoria activa en el sistema
+        try {
+          const resActiva = await axios.get(
+            `${API_URL}/convocatorias/activa`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          )
+          const convActiva = resActiva.data
+
+          if (!convActiva?.id) {
+            // No hay convocatoria activa → banner de espera
+            setConvocatoriaCerrada(true)
+            setMensajeCierre('No hay una convocatoria activa en este momento.')
+            return
+          }
+
+          // Hay convocatoria activa → verificar si ya tiene postulación
+          try {
+            const resPost = await axios.get(
+              `${API_URL}/postulaciones/convocatoria/${convActiva.id}/mi-postulacion`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            )
+
+            if (resPost.data?.id) {
+              // ✅ Ya tiene postulación activa → sí mostrar wizard con datos
+              setConvocatoriaId(String(convActiva.id))
+              setPostulacionId(String(resPost.data.id))
+              setModoEditar(true)
+              precargarDesdePostulacion(resPost.data)
+            } else {
+              // Hay convocatoria pero no se ha postulado → banner "postúlate primero"
+              setConvocatoriaCerrada(true)
+              setMensajeCierre('sin-postulacion:' + convActiva.id)
+            }
+
+          } catch (errPost) {
+            if (errPost.response?.status === 404) {
+              // ✅ No tiene postulación → debe ir a postularse primero
+              setConvocatoriaCerrada(true)
+              setMensajeCierre('sin-postulacion:' + convActiva.id)
+              return
+            }
+            if (errPost.response?.status === 410) {
+              setConvocatoriaCerrada(true)
+              setMensajeCierre(
+                errPost.response?.data?.error ||
+                'Esta convocatoria ya no está disponible.'
+              )
+              return
+            }
+            console.warn('Error verificando postulación:', errPost.message)
+            setConvocatoriaCerrada(true)
+            setMensajeCierre('No hay una convocatoria activa en este momento.')
+          }
+
+        } catch (errActiva) {
+          // 404 = no existe convocatoria activa
+          if (errActiva.response?.status === 404) {
+            setConvocatoriaCerrada(true)
+            setMensajeCierre('No hay una convocatoria activa en este momento.')
+            return
+          }
+          // Error de red → banner genérico
+          console.warn('Error buscando convocatoria activa:', errActiva.message)
+          setConvocatoriaCerrada(true)
+          setMensajeCierre('No hay una convocatoria activa en este momento.')
         }
 
       } catch (err) {
-        // Captura global — solo casos no manejados arriba
         console.warn('Error inesperado en inicializar:', err.message)
-        setPaso(4)
+        setConvocatoriaCerrada(true)
+        setMensajeCierre('No hay una convocatoria activa en este momento.')
       }
     }
 
     inicializar()
   }, [cargando, catalogo]) // eslint-disable-line
+
 
   // ════════════════════════════════════════════════════════════════════════════
   // CARGA DE DATOS
@@ -642,10 +699,57 @@ const SeleccionPlazaPage = () => {
     )
   }
 
-  // ── Banner: Sin convocatoria activa / Convocatoria cerrada ────────────────────
+  // ── Banner: Sin convocatoria activa / Convocatoria cerrada / Sin postulación ──
   const BannerSinConvocatoria = ({ mensaje, onVerConvocatorias }) => {
     const esSinActiva = mensaje?.toLowerCase().includes('no hay')
+    const esSinPostulacion = mensaje?.startsWith('sin-postulacion:')
 
+    // Caso: sin postulación pero hay convocatoria activa
+    if (esSinPostulacion) {
+      return (
+        <div className='card card-custom'>
+          <div className='card-body p-10 text-center'>
+            <div
+              className='d-flex align-items-center justify-content-center rounded-circle mx-auto mb-6'
+              style={{ width: 80, height: 80, background: '#EEF6FF' }}
+            >
+              <i className='fas fa-file-signature' style={{ color: '#3699FF', fontSize: 36 }} />
+            </div>
+
+            <h3 className='font-weight-bolder text-dark mb-3'>
+              Primero debes postularte
+            </h3>
+
+            <p className='text-muted mb-6' style={{ maxWidth: 440, margin: '0 auto 24px' }}>
+              Hay una convocatoria activa disponible. Para poder seleccionar tu plaza,
+              primero debes postularte desde la sección de convocatorias.
+            </p>
+
+            <div
+              className='d-inline-flex align-items-center rounded px-4 py-2 mb-6'
+              style={{ background: '#EEF6FF', border: '1px solid #3699FF' }}
+            >
+              <i className='fas fa-info-circle mr-2' style={{ color: '#3699FF' }} />
+              <span className='font-size-sm font-weight-bold' style={{ color: '#3699FF' }}>
+                Una vez postulado, regresa aquí para seleccionar tu plaza
+              </span>
+            </div>
+
+            <div className='mt-2'>
+              <button
+                className='btn btn-primary font-weight-bold px-8'
+                onClick={onVerConvocatorias}
+              >
+                <i className='fas fa-bullhorn mr-2' />
+                Ir a convocatorias y postularme
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // Caso: sin convocatoria activa / convocatoria cerrada
     return (
       <div className='card card-custom'>
         <div className='card-body p-10 text-center'>
@@ -708,10 +812,12 @@ const SeleccionPlazaPage = () => {
   }
 
   // ════════════════════════════════════════════════════════════════════════════════
-  // RENDER: Convocatoria cerrada / sin activa → mostrar banner, NO el wizard
+  // RENDER: Convocatoria cerrada / sin activa / sin postulación → NO mostrar wizard
   // ════════════════════════════════════════════════════════════════════════════════
   if (convocatoriaCerrada) {
     const esSinActiva = mensajeCierre?.toLowerCase().includes('no hay')
+    const esSinPostulacion = mensajeCierre?.startsWith('sin-postulacion:')
+
     return (
       <div className='container-fluid px-0'>
         {/* Header informativo */}
@@ -723,21 +829,34 @@ const SeleccionPlazaPage = () => {
                   Selección de Plaza
                 </h2>
                 <p className='text-white mb-0' style={{ opacity: 0.7 }}>
-                  {esSinActiva
-                    ? 'Esperando apertura de nueva convocatoria.'
-                    : mensajeCierre || 'Esta convocatoria ya no está disponible.'}
+                  {esSinPostulacion
+                    ? 'Primero debes postularte a la convocatoria activa.'
+                    : esSinActiva
+                      ? 'Esperando apertura de nueva convocatoria.'
+                      : mensajeCierre || 'Esta convocatoria ya no está disponible.'}
                 </p>
               </div>
               <span
                 className='label label-inline label-lg font-weight-bold ml-4'
                 style={{
-                  background: esSinActiva ? '#1BC5BD' : '#F64E60',
+                  background: esSinPostulacion ? '#3699FF'
+                    : esSinActiva ? '#1BC5BD'
+                      : '#F64E60',
                   color: '#fff',
                   whiteSpace: 'nowrap',
                 }}
               >
-                <i className={`fas ${esSinActiva ? 'fa-hourglass-half' : 'fa-lock'} mr-1`} />
-                {esSinActiva ? 'Sin convocatoria activa' : 'Convocatoria cerrada'}
+                <i
+                  className={`fas ${esSinPostulacion ? 'fa-file-signature'
+                      : esSinActiva ? 'fa-hourglass-half'
+                        : 'fa-lock'
+                    } mr-1`}
+                />
+                {esSinPostulacion
+                  ? 'Postulación requerida'
+                  : esSinActiva
+                    ? 'Sin convocatoria activa'
+                    : 'Convocatoria cerrada'}
               </span>
             </div>
           </div>
