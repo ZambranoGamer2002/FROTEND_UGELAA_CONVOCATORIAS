@@ -6,6 +6,24 @@ import * as auth from '../_redux/authRedux'
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'
 
+const getErrorMessage = (data, fallback = 'Ocurrió un error inesperado.') => {
+  if (!data) return fallback
+
+  if (typeof data.detail === 'string') {
+    return data.detail
+  }
+
+  if (data.detail && typeof data.detail === 'object') {
+    return data.detail.mensaje || data.detail.message || fallback
+  }
+
+  if (typeof data.message === 'string') {
+    return data.message
+  }
+
+  return fallback
+}
+
 const IconEye = ({ show }) =>
   show ? (
     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
@@ -32,30 +50,52 @@ function Login(props) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+
+    const usuarioLogin = username.trim().toLowerCase()
+    const passwordLogin = password
+
+    if (!usuarioLogin) {
+      setError('Ingresa tu usuario o correo electrónico.')
+      return
+    }
+
+    if (!passwordLogin) {
+      setError('Ingresa tu contraseña.')
+      return
+    }
+
     setLoading(true)
 
     try {
       const resp = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({
+          username: usuarioLogin,
+          password: passwordLogin,
+        }),
       })
 
       const data = await resp.json().catch(() => ({}))
 
       if (!resp.ok) {
-        throw new Error(data.detail || data.message || 'Credenciales incorrectas.')
+        throw new Error(getErrorMessage(data, 'Credenciales incorrectas.'))
       }
 
       const { access_token, refresh_token, user } = data
 
+      if (!access_token || !user) {
+        throw new Error('No se recibió una sesión válida desde el servidor.')
+      }
+
       localStorage.setItem('access_token', access_token)
-      localStorage.setItem('refresh_token', refresh_token)
+      localStorage.setItem('refresh_token', refresh_token || '')
       localStorage.setItem('user', JSON.stringify(user))
 
-      if (loginAction) loginAction(access_token)
+      if (loginAction) {
+        loginAction(access_token)
+      }
 
-      // ✅ ACTUALIZADO: Pasar TODOS los campos del usuario a Redux
       if (fulfillUser && user) {
         fulfillUser({
           id: user.id,
@@ -68,13 +108,17 @@ function Login(props) {
           perfil_completo: user.perfil_completo,
           estado: user.estado,
           numero_documento: user.numero_documento,
+          provincia_id: user.provincia_id,
+          activo: user.activo,
           pic: '/media/avatars/blank.png',
         })
       }
 
-      setTimeout(() => history.push('/mi-perfil'), 100)
+      setTimeout(() => {
+        history.push('/mi-perfil')
+      }, 100)
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'No se pudo iniciar sesión.')
     } finally {
       setLoading(false)
     }
@@ -82,7 +126,6 @@ function Login(props) {
 
   return (
     <div className='login-form login-signin'>
-      {/* Título */}
       <div className='text-center mb-10 mb-lg-20'>
         <h3 className='font-size-h1'>Iniciar sesión</h3>
         <p className='text-muted font-weight-bold'>
@@ -90,7 +133,6 @@ function Login(props) {
         </p>
       </div>
 
-      {/* Error */}
       {error && (
         <div className='alert alert-danger d-flex align-items-center py-3 mb-5'>
           <span role='img' aria-label='advertencia'>
@@ -100,9 +142,7 @@ function Login(props) {
         </div>
       )}
 
-      {/* Form */}
       <form onSubmit={handleSubmit} className='form' autoComplete='off'>
-        {/* Usuario */}
         <div className='form-group'>
           <input
             className='form-control form-control-solid h-auto py-5 px-6'
@@ -112,10 +152,10 @@ function Login(props) {
             onChange={(e) => setUsername(e.target.value)}
             autoComplete='username'
             required
+            disabled={loading}
           />
         </div>
 
-        {/* Contraseña */}
         <div className='form-group position-relative'>
           <input
             className='form-control form-control-solid h-auto py-5 px-6'
@@ -125,6 +165,7 @@ function Login(props) {
             onChange={(e) => setPassword(e.target.value)}
             autoComplete='current-password'
             required
+            disabled={loading}
           />
 
           <button
@@ -134,12 +175,12 @@ function Login(props) {
             style={{ color: '#a1a5b7' }}
             tabIndex={-1}
             aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            disabled={loading}
           >
             <IconEye show={showPassword} />
           </button>
         </div>
 
-        {/* Links */}
         <div className='form-group d-flex flex-wrap justify-content-between align-items-center'>
           <Link to='/auth/forgot-password' className='text-muted text-hover-primary'>
             ¿Olvidaste tu contraseña?
@@ -150,9 +191,12 @@ function Login(props) {
           </Link>
         </div>
 
-        {/* Submit */}
         <div className='form-group text-center mt-10'>
-          <button type='submit' className='btn btn-primary font-weight-bold px-9 py-4 my-3' disabled={loading}>
+          <button
+            type='submit'
+            className='btn btn-primary font-weight-bold px-9 py-4 my-3'
+            disabled={loading}
+          >
             {loading ? (
               <>
                 <span className='spinner-border spinner-border-sm mr-2' role='status' aria-hidden='true' />
@@ -171,7 +215,9 @@ function Login(props) {
 const mapDispatchToProps = (dispatch) => ({
   login: (authToken) => dispatch(auth.actions.login(authToken)),
   fulfillUser: (user) => {
-    if (auth.actions.fulfillUser) dispatch(auth.actions.fulfillUser(user))
+    if (auth.actions.fulfillUser) {
+      dispatch(auth.actions.fulfillUser(user))
+    }
   },
 })
 
