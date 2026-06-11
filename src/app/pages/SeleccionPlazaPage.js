@@ -1,6 +1,10 @@
 /**
- * SeleccionPlazaPage.js — v8
- * FIX: Detecta convocatoria cerrada y bloquea el wizard mostrando aviso claro.
+ * SeleccionPlazaPage.js
+ * Mejora:
+ * - La selección de plaza ya no depende de entrar desde Convocatorias Disponibles.
+ * - Si el docente entra directo, carga automáticamente la convocatoria activa.
+ * - Si no tiene postulación previa, abre el wizard desde el paso 1.
+ * - Convocatorias Disponibles queda como vista informativa / seguimiento.
  */
 import React, { useState, useEffect, useRef } from 'react'
 import { useHistory, useLocation } from 'react-router-dom'
@@ -20,15 +24,17 @@ const useToken = () => {
 
 const NIVEL_LABEL = { BASICO: 'Básico', AVANZADO: 'Avanzado', NATIVO: 'Nativo' }
 
-// ── Badge nivel lengua ────────────────────────────────────────────────────────
 const NivelBadge = ({ nivel }) => {
   if (!nivel) return <span className='text-muted'>—</span>
+
   const colors = {
     BASICO: { bg: '#FFF4DE', text: '#FFA800' },
     AVANZADO: { bg: '#E8FFF3', text: '#1BC5BD' },
     NATIVO: { bg: '#EEE5FF', text: '#8950FC' },
   }
+
   const c = colors[nivel] || { bg: '#F3F6F9', text: '#7E8299' }
+
   return (
     <span
       className='label label-inline font-weight-bold'
@@ -39,7 +45,6 @@ const NivelBadge = ({ nivel }) => {
   )
 }
 
-// ── Step Indicator ────────────────────────────────────────────────────────────
 const StepIndicator = ({ pasoActual }) => {
   const pasos = [
     { num: 1, label: 'Modalidad' },
@@ -47,6 +52,7 @@ const StepIndicator = ({ pasoActual }) => {
     { num: 3, label: 'Especialidad' },
     { num: 4, label: 'Confirmación' },
   ]
+
   return (
     <div className='d-flex align-items-center justify-content-center mb-8'>
       {pasos.map((paso, idx) => (
@@ -55,19 +61,26 @@ const StepIndicator = ({ pasoActual }) => {
             <div
               className='d-flex align-items-center justify-content-center rounded-circle font-weight-bolder'
               style={{
-                width: 40, height: 40, fontSize: 14,
+                width: 40,
+                height: 40,
+                fontSize: 14,
                 backgroundColor:
-                  pasoActual > paso.num ? '#1BC5BD'
-                    : pasoActual === paso.num ? '#3699FF'
+                  pasoActual > paso.num
+                    ? '#1BC5BD'
+                    : pasoActual === paso.num
+                      ? '#3699FF'
                       : '#EBEDF3',
                 color: pasoActual >= paso.num ? '#fff' : '#B5B5C3',
                 transition: 'all 0.3s ease',
               }}
             >
-              {pasoActual > paso.num
-                ? <i className='fas fa-check' style={{ fontSize: 13 }} />
-                : paso.num}
+              {pasoActual > paso.num ? (
+                <i className='fas fa-check' style={{ fontSize: 13 }} />
+              ) : (
+                paso.num
+              )}
             </div>
+
             <span
               className='mt-2 font-size-xs font-weight-bold'
               style={{ color: pasoActual === paso.num ? '#3699FF' : '#B5B5C3' }}
@@ -75,13 +88,19 @@ const StepIndicator = ({ pasoActual }) => {
               {paso.label}
             </span>
           </div>
+
           {idx < pasos.length - 1 && (
-            <div style={{
-              flex: 1, height: 3, marginBottom: 22,
-              marginLeft: 6, marginRight: 6,
-              backgroundColor: pasoActual > paso.num ? '#1BC5BD' : '#EBEDF3',
-              transition: 'all 0.3s ease',
-            }} />
+            <div
+              style={{
+                flex: 1,
+                height: 3,
+                marginBottom: 22,
+                marginLeft: 6,
+                marginRight: 6,
+                backgroundColor: pasoActual > paso.num ? '#1BC5BD' : '#EBEDF3',
+                transition: 'all 0.3s ease',
+              }}
+            />
           )}
         </React.Fragment>
       ))}
@@ -89,40 +108,6 @@ const StepIndicator = ({ pasoActual }) => {
   )
 }
 
-// ── Banner: Convocatoria Cerrada ──────────────────────────────────────────────
-const BannerConvocatoriaCerrada = ({ onVerConvocatorias }) => (
-  <div className='card card-custom'>
-    <div className='card-body p-10 text-center'>
-      <div
-        className='d-flex align-items-center justify-content-center rounded-circle mx-auto mb-6'
-        style={{ width: 80, height: 80, background: '#FFF5F8' }}
-      >
-        <i className='fas fa-lock' style={{ color: '#F64E60', fontSize: 36 }} />
-      </div>
-      <h3 className='font-weight-bolder text-dark mb-3'>
-        Esta convocatoria ya cerró
-      </h3>
-      <p className='text-muted mb-2' style={{ maxWidth: 420, margin: '0 auto 8px' }}>
-        El período de postulación para esta convocatoria ha finalizado.
-        Ya no es posible modificar tu selección de plaza.
-      </p>
-      <p className='text-muted font-size-sm mb-8' style={{ maxWidth: 420, margin: '0 auto 24px' }}>
-        Si deseas postular, revisa si hay una nueva convocatoria activa.
-      </p>
-      <button
-        className='btn btn-primary font-weight-bold px-8'
-        onClick={onVerConvocatorias}
-      >
-        <i className='fas fa-bullhorn mr-2' />
-        Ver convocatorias disponibles
-      </button>
-    </div>
-  </div>
-)
-
-// ════════════════════════════════════════════════════════════════════════════════
-// COMPONENTE PRINCIPAL
-// ════════════════════════════════════════════════════════════════════════════════
 const SeleccionPlazaPage = () => {
   const history = useHistory()
   const location = useLocation()
@@ -130,40 +115,32 @@ const SeleccionPlazaPage = () => {
 
   const params = new URLSearchParams(location.search)
 
-  // ── IDs desde URL o state ─────────────────────────────────────────────────
   const convocatoriaIdParam = params.get('convocatoria_id') || location.state?.convocatoria_id || null
   const postulacionIdParam = params.get('postulacion_id') || location.state?.postulacion_id || null
   const modoEditarParam = params.get('modo') === 'editar' || location.state?.modo === 'editar'
 
-  // ── Estado dinámico de IDs ────────────────────────────────────────────────
   const [convocatoriaId, setConvocatoriaId] = useState(convocatoriaIdParam)
   const [postulacionId, setPostulacionId] = useState(postulacionIdParam)
   const [modoEditar, setModoEditar] = useState(modoEditarParam)
 
-  // ── NUEVO: Estado de convocatoria cerrada ───────────────────────────────
   const [convocatoriaCerrada, setConvocatoriaCerrada] = useState(false)
   const [mensajeCierre, setMensajeCierre] = useState('')
 
-  // ── Estado wizard ─────────────────────────────────────────────────────────
   const [paso, setPaso] = useState(1)
   const [cargando, setCargando] = useState(true)
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState(null)
 
-  // ── Catálogo ──────────────────────────────────────────────────────────────
   const [catalogo, setCatalogo] = useState([])
   const [caracteristicas, setCaracteristicas] = useState([])
 
-  // ── Bilingüe ──────────────────────────────────────────────────────────────
   const [notaBilingue, setNotaBilingue] = useState(null)
   const [cargandoNota, setCargandoNota] = useState(false)
 
-  // ── Convenio ──────────────────────────────────────────────────────────────
   const [convenioArchivo, setConvenioArchivo] = useState(null)
   const [convenioCodigoAnexo, setConvenioCodigoAnexo] = useState('')
   const fileInputRef = useRef(null)
 
-  // ── Selecciones ───────────────────────────────────────────────────────────
   const [seleccion, setSeleccion] = useState({
     modalidad: null,
     nivel: null,
@@ -171,36 +148,42 @@ const SeleccionPlazaPage = () => {
     caracteristica: null,
   })
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // EFECTO 1 — Cargar catálogo al montar
-  // ════════════════════════════════════════════════════════════════════════════
-  useEffect(() => { cargarCatalogo() }, []) // eslint-disable-line
+  useEffect(() => {
+    cargarCatalogo()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // EFECTO 2 — Cargar nota bilingüe cuando cambia la característica
-  // ════════════════════════════════════════════════════════════════════════════
   useEffect(() => {
     const esBilingue =
       seleccion.caracteristica?.codigo?.toUpperCase().includes('BILING') ||
       seleccion.caracteristica?.nombre?.toUpperCase().includes('BILING')
-    if (esBilingue && token) cargarNotaBilingue()
-    else setNotaBilingue(null)
-  }, [seleccion.caracteristica]) // eslint-disable-line
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // HELPER — Precarga selección desde objeto postulacion
-  // ════════════════════════════════════════════════════════════════════════════
+    if (esBilingue && token) {
+      cargarNotaBilingue()
+    } else {
+      setNotaBilingue(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seleccion.caracteristica])
+
+  const limpiarBloqueoConvocatoria = () => {
+    setConvocatoriaCerrada(false)
+    setMensajeCierre('')
+  }
+
   const precargarDesdePostulacion = (postulacionData, cat, caract) => {
     if (!postulacionData) return
+
     const catalogoActual = cat || catalogo
     const caracteristicasActual = caract || caracteristicas
+
     if (catalogoActual.length === 0) return
 
-    const modalidadObj = catalogoActual.find(m => m.id === postulacionData.modalidad_id) || null
-    const nivelObj = modalidadObj?.niveles?.find(n => n.id === postulacionData.nivel_id) || null
-    const espObj = nivelObj?.especialidades?.find(e => e.id === postulacionData.especialidad_id) || null
+    const modalidadObj = catalogoActual.find((m) => m.id === postulacionData.modalidad_id) || null
+    const nivelObj = modalidadObj?.niveles?.find((n) => n.id === postulacionData.nivel_id) || null
+    const espObj = nivelObj?.especialidades?.find((e) => e.id === postulacionData.especialidad_id) || null
     const caractObj = postulacionData.caracteristica_id
-      ? caracteristicasActual.find(c => c.id === postulacionData.caracteristica_id) || null
+      ? caracteristicasActual.find((c) => c.id === postulacionData.caracteristica_id) || null
       : null
 
     setSeleccion({
@@ -210,34 +193,28 @@ const SeleccionPlazaPage = () => {
       caracteristica: caractObj,
     })
 
-    // ✅ CAMBIO 1: Eliminado el "if (!modalidadObj) return" temprano
-    // Ahora sí asigna la selección aunque no haya modalidad (limpia el estado)
-
-    // ✅ CAMBIO 2: Si no tiene ni modalidad → paso 1 (primera vez real)
     if (espObj && nivelObj && modalidadObj) {
-      setPaso(4)        // Tiene todo → confirmación
+      setPaso(4)
     } else if (nivelObj && modalidadObj) {
-      setPaso(3)        // Tiene modalidad + nivel → falta especialidad
+      setPaso(3)
     } else if (modalidadObj) {
-      setPaso(2)        // Tiene modalidad → falta nivel
+      setPaso(2)
     } else {
-      setPaso(1)        // ✅ Sin datos → primera vez → desde el inicio
+      setPaso(1)
     }
   }
-  // ════════════════════════════════════════════════════════════════════════════
-  //HELPER — Verificar si la convocatoria está activa
-  // ════════════════════════════════════════════════════════════════════════════
+
   const verificarConvocatoria = async (convId) => {
     if (!convId) return true
+
     try {
-      const res = await axios.get(
-        `${API_URL}/convocatorias/${convId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
+      const res = await axios.get(`${API_URL}/convocatorias/${convId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
       const conv = res.data
       const estadosCerrados = ['CERRADA', 'ANULADA', 'FINALIZADA']
 
-      // ✅ Flag explícito del backend (JSONResponse con cerrada: true)
       if (conv.cerrada === true || estadosCerrados.includes(conv.estado)) {
         setConvocatoriaCerrada(true)
         setMensajeCierre(
@@ -251,8 +228,10 @@ const SeleccionPlazaPage = () => {
       if (conv.fecha_fin_postulacion) {
         const hoy = new Date()
         hoy.setHours(0, 0, 0, 0)
+
         const fechaCierre = new Date(conv.fecha_fin_postulacion)
         fechaCierre.setHours(23, 59, 59, 999)
+
         if (hoy > fechaCierre) {
           setConvocatoriaCerrada(true)
           setMensajeCierre(`El período de postulación cerró el ${conv.fecha_fin_postulacion}.`)
@@ -260,10 +239,9 @@ const SeleccionPlazaPage = () => {
         }
       }
 
+      limpiarBloqueoConvocatoria()
       return true
-
     } catch (err) {
-      // ✅ FIX: 410 = convocatoria cerrada → bloquear wizard
       if (
         err.response?.status === 410 ||
         err.response?.status === 403 ||
@@ -272,30 +250,41 @@ const SeleccionPlazaPage = () => {
         setConvocatoriaCerrada(true)
         setMensajeCierre(
           err.response?.data?.error ||
+          err.response?.data?.detail ||
           'Esta convocatoria ya no está disponible para postulaciones.'
         )
         return false
       }
-      // Solo errores de red (500, timeout) → no bloquear
+
       console.warn('No se pudo verificar estado de convocatoria:', err.message)
       return true
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // EFECTO 3 — Detectar y precargar postulación activa
-  // ════════════════════════════════════════════════════════════════════════════
   useEffect(() => {
     if (cargando) return
     if (catalogo.length === 0) return
     if (!token) return
 
+    const abrirWizardNuevaPostulacion = (convId) => {
+      setConvocatoriaId(String(convId))
+      setPostulacionId(null)
+      setModoEditar(false)
+      limpiarBloqueoConvocatoria()
+      setSeleccion({
+        modalidad: null,
+        nivel: null,
+        especialidad: null,
+        caracteristica: null,
+      })
+      setConvenioArchivo(null)
+      setConvenioCodigoAnexo('')
+      setPaso(1)
+    }
+
     const inicializar = async () => {
       try {
-
-        // ══════════════════════════════════════════════════════════════
-        // CASO A: Viene con postulación en state (botón "Modificar")
-        // ══════════════════════════════════════════════════════════════
+        // CASO A: viene desde "Modificar"
         if (modoEditarParam && location.state?.postulacion) {
           const p = location.state.postulacion
           const convId = p.convocatoria_id ? String(p.convocatoria_id) : null
@@ -307,134 +296,121 @@ const SeleccionPlazaPage = () => {
           }
 
           if (p.id) setPostulacionId(String(p.id))
+
           setModoEditar(true)
+          limpiarBloqueoConvocatoria()
           precargarDesdePostulacion(p)
+
           return
         }
 
-        // ══════════════════════════════════════════════════════════════
-        // CASO B: Viene con convocatoria_id explícito por URL
-        // (botón "Postular" desde ConvocatoriasDisponibles)
-        // ══════════════════════════════════════════════════════════════
+        // CASO B: viene con convocatoria_id explícito por URL/state
         if (convocatoriaIdParam) {
-          const activa = await verificarConvocatoria(String(convocatoriaIdParam))
+          const convId = String(convocatoriaIdParam)
+          const activa = await verificarConvocatoria(convId)
+
           if (!activa) return
 
-          // Verificar si ya tiene postulación en esta convocatoria
           try {
             const res = await axios.get(
-              `${API_URL}/postulaciones/convocatoria/${convocatoriaIdParam}/mi-postulacion`,
+              `${API_URL}/postulaciones/convocatoria/${convId}/mi-postulacion`,
               { headers: { Authorization: `Bearer ${token}` } }
             )
 
             if (res.data?.id) {
-              // Ya tiene postulación → precargar y decidir paso según datos
-              setConvocatoriaId(String(convocatoriaIdParam))
+              setConvocatoriaId(convId)
               setPostulacionId(String(res.data.id))
               setModoEditar(true)
+              limpiarBloqueoConvocatoria()
               precargarDesdePostulacion(res.data)
             } else {
-              // Respuesta vacía → primera vez → paso 1
-              setConvocatoriaId(String(convocatoriaIdParam))
-              setPaso(1)
+              abrirWizardNuevaPostulacion(convId)
             }
-
           } catch (errPost) {
             if (errPost.response?.status === 404) {
-              // ✅ Primera vez en esta convocatoria → paso 1 desde el inicio
-              setConvocatoriaId(String(convocatoriaIdParam))
-              setPaso(1)
+              abrirWizardNuevaPostulacion(convId)
               return
             }
+
             if (errPost.response?.status === 410) {
               setConvocatoriaCerrada(true)
               setMensajeCierre(
                 errPost.response?.data?.error ||
+                errPost.response?.data?.detail ||
                 'Esta convocatoria ya no está disponible.'
               )
               return
             }
-            // Error de red u otro → igual dejar en paso 1 con convId asignado
+
             console.warn('Error cargando mi-postulacion:', errPost.message)
-            setConvocatoriaId(String(convocatoriaIdParam))
-            setPaso(1)
+            abrirWizardNuevaPostulacion(convId)
           }
+
           return
         }
 
-        // ══════════════════════════════════════════════════════════════
-        // CASO C: El docente entró directo al menú "Selección de Plaza"
-        // SIN venir de una convocatoria ni de "Modificar"
-        // → NO mostrar wizard. Verificar qué mostrarle.
-        // ══════════════════════════════════════════════════════════════
-
-        // Primero verificar si hay convocatoria activa en el sistema
+        // CASO C: docente entra directo al menú "Selección de Plaza"
+        // Nueva regla: abrir siempre la última convocatoria activa correspondiente.
         try {
-          const resActiva = await axios.get(
-            `${API_URL}/convocatorias/activa`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          )
+          const resActiva = await axios.get(`${API_URL}/convocatorias/activa`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+
           const convActiva = resActiva.data
 
           if (!convActiva?.id) {
-            // No hay convocatoria activa → banner de espera
             setConvocatoriaCerrada(true)
             setMensajeCierre('No hay una convocatoria activa en este momento.')
             return
           }
 
-          // Hay convocatoria activa → verificar si ya tiene postulación
+          const convId = String(convActiva.id)
+
           try {
             const resPost = await axios.get(
-              `${API_URL}/postulaciones/convocatoria/${convActiva.id}/mi-postulacion`,
+              `${API_URL}/postulaciones/convocatoria/${convId}/mi-postulacion`,
               { headers: { Authorization: `Bearer ${token}` } }
             )
 
             if (resPost.data?.id) {
-              // ✅ Ya tiene postulación activa → sí mostrar wizard con datos
-              setConvocatoriaId(String(convActiva.id))
+              setConvocatoriaId(convId)
               setPostulacionId(String(resPost.data.id))
               setModoEditar(true)
+              limpiarBloqueoConvocatoria()
               precargarDesdePostulacion(resPost.data)
             } else {
-              // Hay convocatoria pero no se ha postulado → banner "postúlate primero"
-              setConvocatoriaCerrada(true)
-              setMensajeCierre('sin-postulacion:' + convActiva.id)
+              abrirWizardNuevaPostulacion(convId)
             }
-
           } catch (errPost) {
             if (errPost.response?.status === 404) {
-              // ✅ No tiene postulación → debe ir a postularse primero
-              setConvocatoriaCerrada(true)
-              setMensajeCierre('sin-postulacion:' + convActiva.id)
+              abrirWizardNuevaPostulacion(convId)
               return
             }
+
             if (errPost.response?.status === 410) {
               setConvocatoriaCerrada(true)
               setMensajeCierre(
                 errPost.response?.data?.error ||
+                errPost.response?.data?.detail ||
                 'Esta convocatoria ya no está disponible.'
               )
               return
             }
-            console.warn('Error verificando postulación:', errPost.message)
-            setConvocatoriaCerrada(true)
-            setMensajeCierre('No hay una convocatoria activa en este momento.')
-          }
 
+            console.warn('Error verificando postulación:', errPost.message)
+            abrirWizardNuevaPostulacion(convId)
+          }
         } catch (errActiva) {
-          // 404 = no existe convocatoria activa
           if (errActiva.response?.status === 404) {
             setConvocatoriaCerrada(true)
             setMensajeCierre('No hay una convocatoria activa en este momento.')
             return
           }
-          // Error de red → banner genérico
+
           console.warn('Error buscando convocatoria activa:', errActiva.message)
           setConvocatoriaCerrada(true)
           setMensajeCierre('No hay una convocatoria activa en este momento.')
         }
-
       } catch (err) {
         console.warn('Error inesperado en inicializar:', err.message)
         setConvocatoriaCerrada(true)
@@ -443,31 +419,32 @@ const SeleccionPlazaPage = () => {
     }
 
     inicializar()
-  }, [cargando, catalogo]) // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargando, catalogo])
 
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // CARGA DE DATOS
-  // ════════════════════════════════════════════════════════════════════════════
   const cargarCatalogo = async () => {
     setCargando(true)
     setError(null)
+
     try {
       const [resCatalogo, resCaract] = await Promise.allSettled([
         axiosPublico.get('/catalogo/plaza/cascada'),
         axiosPublico.get('/catalogo/caracteristicas?solo_docente=true'),
       ])
+
       if (resCatalogo.status === 'fulfilled') {
         setCatalogo(resCatalogo.value.data)
       } else {
         throw new Error('No se pudo cargar el catálogo')
       }
+
       if (resCaract.status === 'fulfilled') {
         const sorted = [...resCaract.value.data].sort((a, b) => {
           if (a.nombre?.toUpperCase().includes('ESTATAL')) return -1
           if (b.nombre?.toUpperCase().includes('ESTATAL')) return 1
           return 0
         })
+
         setCaracteristicas(sorted)
       }
     } catch (err) {
@@ -479,38 +456,54 @@ const SeleccionPlazaPage = () => {
 
   const cargarNotaBilingue = async () => {
     if (!token) return
+
     setCargandoNota(true)
+
     try {
       const res = await axios.get(`${API_URL}/catalogo/bilingue/docente/me`, {
         headers: { Authorization: `Bearer ${token}` },
       })
+
       setNotaBilingue(res.data)
     } catch {
-      // 404 = sin notas bilingüe → no es error crítico, el wizard continúa
       setNotaBilingue(null)
     } finally {
       setCargandoNota(false)
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // HELPERS CASCADA
-  // ════════════════════════════════════════════════════════════════════════════
   const nivelesDisponibles = seleccion.modalidad?.niveles || []
   const especialidadesDisponibles = seleccion.nivel?.especialidades || []
 
   const seleccionarModalidad = (m) => {
-    setSeleccion({ modalidad: m, nivel: null, especialidad: null, caracteristica: null })
+    setSeleccion({
+      modalidad: m,
+      nivel: null,
+      especialidad: null,
+      caracteristica: null,
+    })
     setPaso(2)
   }
+
   const seleccionarNivel = (n) => {
-    setSeleccion((p) => ({ ...p, nivel: n, especialidad: null, caracteristica: null }))
+    setSeleccion((p) => ({
+      ...p,
+      nivel: n,
+      especialidad: null,
+      caracteristica: null,
+    }))
     setPaso(3)
   }
+
   const seleccionarEspecialidad = (e) => {
-    setSeleccion((p) => ({ ...p, especialidad: e, caracteristica: null }))
+    setSeleccion((p) => ({
+      ...p,
+      especialidad: e,
+      caracteristica: null,
+    }))
     setPaso(4)
   }
+
   const seleccionarCaracteristica = (c) => {
     setSeleccion((p) => ({
       ...p,
@@ -522,21 +515,21 @@ const SeleccionPlazaPage = () => {
 
   const tipoCaracteristica = () => {
     if (!seleccion.caracteristica) return 'ESTATAL'
+
     const nombre = seleccion.caracteristica.nombre?.toUpperCase() || ''
+
     if (nombre.includes('BILING')) return 'BILINGUE'
     if (nombre.includes('CONVEN')) return 'CONVENIO'
+
     return 'OTRO'
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // CONFIRMAR / GUARDAR POSTULACIÓN
-  // ════════════════════════════════════════════════════════════════════════════
   const confirmarPostulacion = async () => {
     if (!convocatoriaId) {
       Swal.fire({
         icon: 'warning',
         title: 'Sin convocatoria',
-        text: 'No hay una convocatoria activa. Vuelve a la lista de convocatorias.',
+        text: 'No hay una convocatoria activa disponible.',
         confirmButtonColor: '#F64E60',
       })
       return
@@ -553,13 +546,25 @@ const SeleccionPlazaPage = () => {
     }
 
     const esConvenio = seleccion.caracteristica?.nombre?.toUpperCase().includes('CONVEN')
+
     if (esConvenio) {
       if (!convenioCodigoAnexo?.trim()) {
-        Swal.fire({ icon: 'warning', title: 'Código de anexo requerido', text: 'Debes ingresar el código de anexo del convenio.', confirmButtonColor: '#3699FF' })
+        Swal.fire({
+          icon: 'warning',
+          title: 'Código de anexo requerido',
+          text: 'Debes ingresar el código de anexo del convenio.',
+          confirmButtonColor: '#3699FF',
+        })
         return
       }
+
       if (!convenioArchivo) {
-        Swal.fire({ icon: 'warning', title: 'Documento requerido', text: 'Debes subir el documento del convenio.', confirmButtonColor: '#3699FF' })
+        Swal.fire({
+          icon: 'warning',
+          title: 'Documento requerido',
+          text: 'Debes subir el documento del convenio.',
+          confirmButtonColor: '#3699FF',
+        })
         return
       }
     }
@@ -568,7 +573,7 @@ const SeleccionPlazaPage = () => {
 
     try {
       const payload = {
-        convocatoria_id: convocatoriaId,
+        convocatoria_id: Number(convocatoriaId),
         modalidad_id: seleccion.modalidad.id,
         nivel_id: seleccion.nivel.id,
         especialidad_id: seleccion.especialidad.id,
@@ -578,44 +583,56 @@ const SeleccionPlazaPage = () => {
       let postulacionData
 
       if (modoEditar && postulacionId) {
-        const resp = await fetch(
-          `${API_URL}/postulaciones/${postulacionId}/seleccion-plaza`,
-          {
-            method: 'PATCH',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              modalidad_id: seleccion.modalidad.id,
-              nivel_id: seleccion.nivel.id,
-              especialidad_id: seleccion.especialidad.id,
-            }),
-          }
-        )
+        const resp = await fetch(`${API_URL}/postulaciones/${postulacionId}/seleccion-plaza`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            modalidad_id: seleccion.modalidad.id,
+            nivel_id: seleccion.nivel.id,
+            especialidad_id: seleccion.especialidad.id,
+            caracteristica_id: seleccion.caracteristica?.id || null,
+          }),
+        })
+
         const data = await resp.json()
 
-        // Detectar error de convocatoria cerrada desde el backend
         if (!resp.ok) {
           const detalle = data.detail || 'Error al actualizar la plaza'
-          const esCierre = detalle.toLowerCase().includes('cerr') ||
-            detalle.toLowerCase().includes('anulad') ||
-            detalle.toLowerCase().includes('período')
+          const detalleLower = detalle.toLowerCase()
+          const esCierre =
+            detalleLower.includes('cerr') ||
+            detalleLower.includes('anulad') ||
+            detalleLower.includes('período')
 
           if (esCierre) {
             setConvocatoriaCerrada(true)
             setMensajeCierre(detalle)
             return
           }
+
           throw new Error(detalle)
         }
-        postulacionData = { id: postulacionId, ...data }
 
+        postulacionData = { id: postulacionId, ...data }
       } else {
         const resp = await fetch(`${API_URL}/postulaciones/`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify(payload),
         })
+
         const data = await resp.json()
-        if (!resp.ok) throw new Error(data.detail || 'Error al crear la postulación')
+
+        if (!resp.ok) {
+          throw new Error(data.detail || 'Error al crear la postulación')
+        }
+
         postulacionData = data
       }
 
@@ -623,10 +640,13 @@ const SeleccionPlazaPage = () => {
         const formData = new FormData()
         formData.append('archivo', convenioArchivo)
         formData.append('codigo_anexo', convenioCodigoAnexo)
-        const respConv = await fetch(
-          `${API_URL}/postulaciones/${postulacionData.id}/convenio`,
-          { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData }
-        )
+
+        const respConv = await fetch(`${API_URL}/postulaciones/${postulacionData.id}/convenio`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        })
+
         if (!respConv.ok) {
           const errConv = await respConv.json()
           throw new Error(errConv.detail || 'Error al subir el documento de convenio')
@@ -635,7 +655,7 @@ const SeleccionPlazaPage = () => {
 
       await Swal.fire({
         icon: 'success',
-        title: modoEditar ? '¡Plaza actualizada!' : '¡Postulación creada!',
+        title: modoEditar ? 'Plaza actualizada' : 'Postulación creada',
         html: `
           <p style="color:#3F4254;margin-bottom:12px">
             ${modoEditar ? 'Tu selección de plaza fue actualizada.' : 'Tu postulación fue registrada exitosamente.'}
@@ -657,7 +677,6 @@ const SeleccionPlazaPage = () => {
       })
 
       history.push('/mis-postulaciones')
-
     } catch (err) {
       Swal.fire({
         icon: 'error',
@@ -670,9 +689,6 @@ const SeleccionPlazaPage = () => {
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // ESTADOS DE CARGA / ERROR
-  // ════════════════════════════════════════════════════════════════════════════
   if (cargando) {
     return (
       <div className='d-flex justify-content-center align-items-center' style={{ minHeight: 400 }}>
@@ -699,64 +715,17 @@ const SeleccionPlazaPage = () => {
     )
   }
 
-  // ── Banner: Sin convocatoria activa / Convocatoria cerrada / Sin postulación ──
   const BannerSinConvocatoria = ({ mensaje, onVerConvocatorias }) => {
     const esSinActiva = mensaje?.toLowerCase().includes('no hay')
-    const esSinPostulacion = mensaje?.startsWith('sin-postulacion:')
 
-    // Caso: sin postulación pero hay convocatoria activa
-    if (esSinPostulacion) {
-      return (
-        <div className='card card-custom'>
-          <div className='card-body p-10 text-center'>
-            <div
-              className='d-flex align-items-center justify-content-center rounded-circle mx-auto mb-6'
-              style={{ width: 80, height: 80, background: '#EEF6FF' }}
-            >
-              <i className='fas fa-file-signature' style={{ color: '#3699FF', fontSize: 36 }} />
-            </div>
-
-            <h3 className='font-weight-bolder text-dark mb-3'>
-              Primero debes postularte
-            </h3>
-
-            <p className='text-muted mb-6' style={{ maxWidth: 440, margin: '0 auto 24px' }}>
-              Hay una convocatoria activa disponible. Para poder seleccionar tu plaza,
-              primero debes postularte desde la sección de convocatorias.
-            </p>
-
-            <div
-              className='d-inline-flex align-items-center rounded px-4 py-2 mb-6'
-              style={{ background: '#EEF6FF', border: '1px solid #3699FF' }}
-            >
-              <i className='fas fa-info-circle mr-2' style={{ color: '#3699FF' }} />
-              <span className='font-size-sm font-weight-bold' style={{ color: '#3699FF' }}>
-                Una vez postulado, regresa aquí para seleccionar tu plaza
-              </span>
-            </div>
-
-            <div className='mt-2'>
-              <button
-                className='btn btn-primary font-weight-bold px-8'
-                onClick={onVerConvocatorias}
-              >
-                <i className='fas fa-bullhorn mr-2' />
-                Ir a convocatorias y postularme
-              </button>
-            </div>
-          </div>
-        </div>
-      )
-    }
-
-    // Caso: sin convocatoria activa / convocatoria cerrada
     return (
       <div className='card card-custom'>
         <div className='card-body p-10 text-center'>
           <div
             className='d-flex align-items-center justify-content-center rounded-circle mx-auto mb-6'
             style={{
-              width: 80, height: 80,
+              width: 80,
+              height: 80,
               background: esSinActiva ? '#E8FFF3' : '#FFF5F8',
             }}
           >
@@ -770,9 +739,7 @@ const SeleccionPlazaPage = () => {
           </div>
 
           <h3 className='font-weight-bolder text-dark mb-3'>
-            {esSinActiva
-              ? 'No hay plaza disponible aún'
-              : 'Esta convocatoria ya cerró'}
+            {esSinActiva ? 'No hay plaza disponible aún' : 'Esta convocatoria ya cerró'}
           </h3>
 
           <p className='text-muted mb-2' style={{ maxWidth: 440, margin: '0 auto 8px' }}>
@@ -811,16 +778,11 @@ const SeleccionPlazaPage = () => {
     )
   }
 
-  // ════════════════════════════════════════════════════════════════════════════════
-  // RENDER: Convocatoria cerrada / sin activa / sin postulación → NO mostrar wizard
-  // ════════════════════════════════════════════════════════════════════════════════
   if (convocatoriaCerrada) {
     const esSinActiva = mensajeCierre?.toLowerCase().includes('no hay')
-    const esSinPostulacion = mensajeCierre?.startsWith('sin-postulacion:')
 
     return (
       <div className='container-fluid px-0'>
-        {/* Header informativo */}
         <div className='card card-custom mb-7' style={{ background: HEADER_GRADIENT, border: 'none' }}>
           <div className='card-body py-8 px-8'>
             <div className='d-flex align-items-center' style={{ gap: 12 }}>
@@ -829,34 +791,22 @@ const SeleccionPlazaPage = () => {
                   Selección de Plaza
                 </h2>
                 <p className='text-white mb-0' style={{ opacity: 0.7 }}>
-                  {esSinPostulacion
-                    ? 'Primero debes postularte a la convocatoria activa.'
-                    : esSinActiva
-                      ? 'Esperando apertura de nueva convocatoria.'
-                      : mensajeCierre || 'Esta convocatoria ya no está disponible.'}
+                  {esSinActiva
+                    ? 'Esperando apertura de nueva convocatoria.'
+                    : mensajeCierre || 'Esta convocatoria ya no está disponible.'}
                 </p>
               </div>
+
               <span
                 className='label label-inline label-lg font-weight-bold ml-4'
                 style={{
-                  background: esSinPostulacion ? '#3699FF'
-                    : esSinActiva ? '#1BC5BD'
-                      : '#F64E60',
+                  background: esSinActiva ? '#1BC5BD' : '#F64E60',
                   color: '#fff',
                   whiteSpace: 'nowrap',
                 }}
               >
-                <i
-                  className={`fas ${esSinPostulacion ? 'fa-file-signature'
-                      : esSinActiva ? 'fa-hourglass-half'
-                        : 'fa-lock'
-                    } mr-1`}
-                />
-                {esSinPostulacion
-                  ? 'Postulación requerida'
-                  : esSinActiva
-                    ? 'Sin convocatoria activa'
-                    : 'Convocatoria cerrada'}
+                <i className={`fas ${esSinActiva ? 'fa-hourglass-half' : 'fa-lock'} mr-1`} />
+                {esSinActiva ? 'Sin convocatoria activa' : 'Convocatoria cerrada'}
               </span>
             </div>
           </div>
@@ -870,13 +820,8 @@ const SeleccionPlazaPage = () => {
     )
   }
 
-  // ════════════════════════════════════════════════════════════════════════════════
-  // RENDER PRINCIPAL — Wizard normal
-  // ════════════════════════════════════════════════════════════════════════════════
   return (
     <div className='container-fluid px-0'>
-
-      {/* ── Header ── */}
       <div className='card card-custom mb-7' style={{ background: HEADER_GRADIENT, border: 'none' }}>
         <div className='card-body py-8 px-8'>
           <div className='d-flex align-items-center justify-content-between flex-wrap' style={{ gap: 12 }}>
@@ -885,6 +830,7 @@ const SeleccionPlazaPage = () => {
                 <h2 className='text-white font-weight-bolder mb-0'>
                   {modoEditar ? 'Modificar Selección de Plaza' : 'Selección de Plaza'}
                 </h2>
+
                 {modoEditar && (
                   <span
                     className='label label-inline label-lg font-weight-bold'
@@ -895,6 +841,7 @@ const SeleccionPlazaPage = () => {
                   </span>
                 )}
               </div>
+
               <p className='text-white mb-0' style={{ opacity: 0.8 }}>
                 {modoEditar
                   ? 'Actualiza tu modalidad, nivel y especialidad cuando lo necesites.'
@@ -904,25 +851,33 @@ const SeleccionPlazaPage = () => {
 
             <div className='d-none d-md-flex align-items-center flex-wrap' style={{ gap: 8 }}>
               {seleccion.modalidad && (
-                <span className='label label-inline label-lg font-weight-bold'
-                  style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
+                <span
+                  className='label label-inline label-lg font-weight-bold'
+                  style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}
+                >
                   <i className='fas fa-chalkboard-teacher mr-2' />
                   {seleccion.modalidad.nombre}
                 </span>
               )}
+
               {seleccion.nivel && (
-                <span className='label label-inline label-lg font-weight-bold'
-                  style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
+                <span
+                  className='label label-inline label-lg font-weight-bold'
+                  style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}
+                >
                   <i className='fas fa-layer-group mr-2' />
                   {seleccion.nivel.nombre}
                 </span>
               )}
+
               {seleccion.especialidad && (
-                <span className='label label-inline label-lg font-weight-bold'
+                <span
+                  className='label label-inline label-lg font-weight-bold'
                   style={{
                     background: seleccion.especialidad.color_folder_hex || '#3699FF',
                     color: '#fff',
-                  }}>
+                  }}
+                >
                   <i className='fas fa-folder mr-2' />
                   {seleccion.especialidad.nombre}
                 </span>
@@ -932,10 +887,11 @@ const SeleccionPlazaPage = () => {
         </div>
       </div>
 
-      {/* ── Alerta modo editar ── */}
       {modoEditar && (
-        <div className='rounded p-4 mb-5 d-flex align-items-center'
-          style={{ background: '#FFF4DE', borderLeft: '4px solid #FFA800' }}>
+        <div
+          className='rounded p-4 mb-5 d-flex align-items-center'
+          style={{ background: '#FFF4DE', borderLeft: '4px solid #FFA800' }}
+        >
           <i className='fas fa-pencil-alt mr-3' style={{ color: '#FFA800', fontSize: 18 }} />
           <div>
             <div className='font-weight-bold' style={{ color: '#FFA800', fontSize: 13 }}>
@@ -943,24 +899,18 @@ const SeleccionPlazaPage = () => {
             </div>
             <div className='text-muted font-size-sm'>
               Puedes cambiar tu selección de plaza libremente y guardar cuando lo necesites.
-              Solo disponible mientras la postulación esté en estado{' '}
-              <strong>En Progreso</strong>.
+              Solo disponible mientras la postulación esté en estado <strong>En Progreso</strong>.
             </div>
           </div>
         </div>
       )}
 
-      {/* ── ELIMINADO: bloque "Sin convocatoria" que aparecía en el wizard ── */}
-
       <div className='row'>
-
-        {/* ══ CONTENIDO PRINCIPAL ══════════════════════════════════════ */}
         <div className='col-xl-8 col-lg-8'>
           <div className='card card-custom'>
             <div className='card-body p-8'>
               <StepIndicator pasoActual={paso} />
 
-              {/* ══ PASO 1 — MODALIDAD ══ */}
               {paso === 1 && (
                 <div>
                   <h4 className='font-weight-bolder text-dark mb-2'>
@@ -969,6 +919,7 @@ const SeleccionPlazaPage = () => {
                   <p className='text-muted mb-6'>
                     Selecciona la modalidad educativa correspondiente a tu plaza.
                   </p>
+
                   <div className='row'>
                     {catalogo.map((modalidad) => (
                       <div key={modalidad.id} className='col-md-6 mb-4'>
@@ -990,6 +941,7 @@ const SeleccionPlazaPage = () => {
                             >
                               <i className='fas fa-chalkboard-teacher text-primary' style={{ fontSize: 20 }} />
                             </div>
+
                             <div>
                               <div className='font-weight-bolder text-dark'>
                                 {modalidad.nombre}
@@ -1007,14 +959,18 @@ const SeleccionPlazaPage = () => {
                 </div>
               )}
 
-              {/* ══ PASO 2 — NIVEL ══ */}
               {paso === 2 && (
                 <div>
                   <div className='d-flex align-items-center mb-6'>
-                    <button className='btn btn-sm btn-light font-weight-bold mr-3' onClick={() => setPaso(1)}>
+                    <button
+                      type='button'
+                      className='btn btn-sm btn-light font-weight-bold mr-3'
+                      onClick={() => setPaso(1)}
+                    >
                       <i className='fas fa-arrow-left mr-1' />
                       Volver
                     </button>
+
                     <div>
                       <h4 className='font-weight-bolder text-dark mb-0'>
                         Selecciona el nivel
@@ -1025,6 +981,7 @@ const SeleccionPlazaPage = () => {
                       </p>
                     </div>
                   </div>
+
                   <div className='row'>
                     {nivelesDisponibles.map((nivel) => (
                       <div key={nivel.id} className='col-md-6 mb-4'>
@@ -1046,6 +1003,7 @@ const SeleccionPlazaPage = () => {
                             >
                               <i className='fas fa-layer-group' style={{ color: '#1BC5BD', fontSize: 20 }} />
                             </div>
+
                             <div>
                               <div className='font-weight-bolder text-dark'>
                                 {nivel.nombre}
@@ -1063,14 +1021,18 @@ const SeleccionPlazaPage = () => {
                 </div>
               )}
 
-              {/* ══ PASO 3 — ESPECIALIDAD ══ */}
               {paso === 3 && (
                 <div>
                   <div className='d-flex align-items-center mb-6'>
-                    <button className='btn btn-sm btn-light font-weight-bold mr-3' onClick={() => setPaso(2)}>
+                    <button
+                      type='button'
+                      className='btn btn-sm btn-light font-weight-bold mr-3'
+                      onClick={() => setPaso(2)}
+                    >
                       <i className='fas fa-arrow-left mr-1' />
                       Volver
                     </button>
+
                     <div>
                       <h4 className='font-weight-bolder text-dark mb-0'>
                         Selecciona la especialidad
@@ -1083,10 +1045,12 @@ const SeleccionPlazaPage = () => {
                       </p>
                     </div>
                   </div>
+
                   <div className='row'>
                     {especialidadesDisponibles.map((esp) => {
                       const colorFolder = esp.color_folder_hex || '#3699FF'
                       const seleccionado = seleccion.especialidad?.id === esp.id
+
                       return (
                         <div key={esp.id} className='col-md-6 mb-4'>
                           <div
@@ -1104,12 +1068,15 @@ const SeleccionPlazaPage = () => {
                               <div
                                 className='d-flex align-items-center justify-content-center rounded mr-4'
                                 style={{
-                                  width: 48, height: 48, flexShrink: 0,
+                                  width: 48,
+                                  height: 48,
+                                  flexShrink: 0,
                                   background: `${colorFolder}20`,
                                 }}
                               >
                                 <i className='fas fa-folder' style={{ color: colorFolder, fontSize: 22 }} />
                               </div>
+
                               <div className='font-weight-bolder text-dark'>
                                 {esp.nombre}
                               </div>
@@ -1122,14 +1089,18 @@ const SeleccionPlazaPage = () => {
                 </div>
               )}
 
-              {/* ══ PASO 4 — CONFIRMACIÓN ══ */}
               {paso === 4 && (
                 <div>
                   <div className='d-flex align-items-center mb-6'>
-                    <button className='btn btn-sm btn-light font-weight-bold mr-3' onClick={() => setPaso(3)}>
+                    <button
+                      type='button'
+                      className='btn btn-sm btn-light font-weight-bold mr-3'
+                      onClick={() => setPaso(3)}
+                    >
                       <i className='fas fa-arrow-left mr-1' />
                       Volver
                     </button>
+
                     <div>
                       <h4 className='font-weight-bolder text-dark mb-0'>
                         Confirmar selección
@@ -1140,7 +1111,6 @@ const SeleccionPlazaPage = () => {
                     </div>
                   </div>
 
-                  {/* Resumen selección */}
                   <div className='rounded p-5 mb-6' style={{ background: '#F8F9FA', border: '1px solid #EBEDF3' }}>
                     <div className='row'>
                       <div className='col-md-4 mb-3 mb-md-0'>
@@ -1152,6 +1122,7 @@ const SeleccionPlazaPage = () => {
                           </span>
                         </div>
                       </div>
+
                       <div className='col-md-4 mb-3 mb-md-0'>
                         <div className='text-muted font-size-xs mb-1'>Nivel</div>
                         <div className='d-flex align-items-center'>
@@ -1161,6 +1132,7 @@ const SeleccionPlazaPage = () => {
                           </span>
                         </div>
                       </div>
+
                       <div className='col-md-4'>
                         <div className='text-muted font-size-xs mb-1'>Especialidad</div>
                         <div className='d-flex align-items-center'>
@@ -1176,14 +1148,12 @@ const SeleccionPlazaPage = () => {
                     </div>
                   </div>
 
-                  {/* ── Características ── */}
                   <h6 className='font-weight-bolder text-dark mb-4'>
                     <i className='fas fa-sliders-h mr-2 text-primary' />
                     Característica de la plaza
                   </h6>
-                  <div className='row mb-5'>
 
-                    {/* ESTATAL */}
+                  <div className='row mb-5'>
                     <div className='col-md-4 mb-3'>
                       <div
                         className='border rounded p-4 text-center'
@@ -1195,7 +1165,7 @@ const SeleccionPlazaPage = () => {
                           boxShadow: !seleccion.caracteristica ? '0 0 0 2px #1BC5BD33' : 'none',
                         }}
                         onClick={() => {
-                          setSeleccion(p => ({ ...p, caracteristica: null }))
+                          setSeleccion((p) => ({ ...p, caracteristica: null }))
                           setConvenioArchivo(null)
                           setConvenioCodigoAnexo('')
                         }}
@@ -1206,16 +1176,17 @@ const SeleccionPlazaPage = () => {
                         >
                           <i className='fas fa-university' style={{ color: '#1BC5BD', fontSize: 20 }} />
                         </div>
+
                         <div className='font-weight-bolder text-dark'>Estatal</div>
                         <div className='text-muted font-size-xs mt-1'>Predeterminado</div>
                       </div>
                     </div>
 
-                    {/* BILINGÜE */}
                     {caracteristicas
-                      .filter(c => c.nombre?.toUpperCase().includes('BILING'))
+                      .filter((c) => c.nombre?.toUpperCase().includes('BILING'))
                       .map((caract) => {
                         const seleccionado = seleccion.caracteristica?.id === caract.id
+
                         return (
                           <div key={caract.id} className='col-md-4 mb-3'>
                             <div
@@ -1235,6 +1206,7 @@ const SeleccionPlazaPage = () => {
                               >
                                 <i className='fas fa-language' style={{ color: '#8950FC', fontSize: 20 }} />
                               </div>
+
                               <div className='font-weight-bolder text-dark'>{caract.nombre}</div>
                               <div className='text-muted font-size-xs mt-1'>Lengua originaria</div>
                             </div>
@@ -1242,11 +1214,11 @@ const SeleccionPlazaPage = () => {
                         )
                       })}
 
-                    {/* CONVENIO */}
                     {caracteristicas
-                      .filter(c => c.nombre?.toUpperCase().includes('CONVEN'))
+                      .filter((c) => c.nombre?.toUpperCase().includes('CONVEN'))
                       .map((caract) => {
                         const seleccionado = seleccion.caracteristica?.id === caract.id
+
                         return (
                           <div key={caract.id} className='col-md-4 mb-3'>
                             <div
@@ -1266,6 +1238,7 @@ const SeleccionPlazaPage = () => {
                               >
                                 <i className='fas fa-handshake' style={{ color: '#FFA800', fontSize: 20 }} />
                               </div>
+
                               <div className='font-weight-bolder text-dark'>{caract.nombre}</div>
                               <div className='text-muted font-size-xs mt-1'>Requiere documento</div>
                             </div>
@@ -1274,14 +1247,13 @@ const SeleccionPlazaPage = () => {
                       })}
                   </div>
 
-                  {/* Panel Bilingüe */}
                   {tipoCaracteristica() === 'BILINGUE' && (
-                    <div className='rounded p-5 mb-5'
-                      style={{ background: '#EEE5FF', borderLeft: '4px solid #8950FC' }}>
+                    <div className='rounded p-5 mb-5' style={{ background: '#EEE5FF', borderLeft: '4px solid #8950FC' }}>
                       <div className='font-weight-bolder mb-3' style={{ color: '#8950FC' }}>
                         <i className='fas fa-language mr-2' />
                         Notas de lengua originaria registradas
                       </div>
+
                       {cargandoNota ? (
                         <div className='d-flex align-items-center'>
                           <div className='spinner-border spinner-border-sm mr-2' style={{ color: '#8950FC' }} />
@@ -1310,14 +1282,13 @@ const SeleccionPlazaPage = () => {
                     </div>
                   )}
 
-                  {/* Panel Convenio */}
                   {tipoCaracteristica() === 'CONVENIO' && (
-                    <div className='rounded p-5 mb-5'
-                      style={{ background: '#FFF4DE', borderLeft: '4px solid #FFA800' }}>
+                    <div className='rounded p-5 mb-5' style={{ background: '#FFF4DE', borderLeft: '4px solid #FFA800' }}>
                       <div className='font-weight-bolder mb-4' style={{ color: '#FFA800' }}>
                         <i className='fas fa-handshake mr-2' />
                         Documentación de convenio requerida
                       </div>
+
                       <div className='form-group mb-4'>
                         <label className='font-weight-bold font-size-sm'>
                           Código de anexo <span className='text-danger'>*</span>
@@ -1330,10 +1301,12 @@ const SeleccionPlazaPage = () => {
                           onChange={(e) => setConvenioCodigoAnexo(e.target.value)}
                         />
                       </div>
+
                       <div className='form-group mb-0'>
                         <label className='font-weight-bold font-size-sm'>
                           Documento de convenio <span className='text-danger'>*</span>
                         </label>
+
                         <div
                           className='border rounded p-5 text-center mt-1'
                           style={{
@@ -1352,6 +1325,7 @@ const SeleccionPlazaPage = () => {
                             style={{ display: 'none' }}
                             onChange={(e) => setConvenioArchivo(e.target.files[0] || null)}
                           />
+
                           {convenioArchivo ? (
                             <div className='d-flex align-items-center justify-content-center' style={{ gap: 10 }}>
                               <i className='fas fa-file-alt' style={{ color: '#FFA800', fontSize: 24 }} />
@@ -1359,7 +1333,9 @@ const SeleccionPlazaPage = () => {
                                 <div className='font-weight-bold text-dark font-size-sm'>{convenioArchivo.name}</div>
                                 <div className='text-muted font-size-xs'>{(convenioArchivo.size / 1024 / 1024).toFixed(2)} MB</div>
                               </div>
+
                               <button
+                                type='button'
                                 className='btn btn-icon btn-sm btn-light-danger ml-3'
                                 onClick={(e) => {
                                   e.stopPropagation()
@@ -1381,6 +1357,7 @@ const SeleccionPlazaPage = () => {
                           )}
                         </div>
                       </div>
+
                       {(!convenioArchivo || !convenioCodigoAnexo.trim()) && (
                         <div className='d-flex align-items-center mt-3'>
                           <i className='fas fa-exclamation-circle mr-2' style={{ color: '#FFA800', fontSize: 13 }} />
@@ -1392,8 +1369,8 @@ const SeleccionPlazaPage = () => {
                     </div>
                   )}
 
-                  {/* Botón confirmar */}
                   <button
+                    type='button'
                     className='btn btn-primary btn-block font-weight-bold py-4'
                     style={{ borderRadius: 8, fontSize: 15 }}
                     onClick={confirmarPostulacion}
@@ -1411,15 +1388,12 @@ const SeleccionPlazaPage = () => {
                       </>
                     )}
                   </button>
-
                 </div>
               )}
-
             </div>
           </div>
         </div>
 
-        {/* ══ PANEL LATERAL ════════════════════════════════════════════ */}
         <div className='col-xl-4 col-lg-4'>
           <div className='card card-custom'>
             <div className='card-header'>
@@ -1427,17 +1401,24 @@ const SeleccionPlazaPage = () => {
                 <h3 className='card-label font-weight-bolder font-size-sm'>Tu selección</h3>
               </div>
             </div>
-            <div className='card-body p-6'>
 
-              {/* Modalidad */}
+            <div className='card-body p-6'>
               <div className='d-flex align-items-center mb-4'>
                 <div
                   className='d-flex align-items-center justify-content-center rounded mr-3'
-                  style={{ width: 36, height: 36, background: seleccion.modalidad ? '#EEF6FF' : '#F3F6F9', flexShrink: 0 }}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    background: seleccion.modalidad ? '#EEF6FF' : '#F3F6F9',
+                    flexShrink: 0,
+                  }}
                 >
-                  <i className='fas fa-chalkboard-teacher'
-                    style={{ color: seleccion.modalidad ? '#3699FF' : '#B5B5C3', fontSize: 16 }} />
+                  <i
+                    className='fas fa-chalkboard-teacher'
+                    style={{ color: seleccion.modalidad ? '#3699FF' : '#B5B5C3', fontSize: 16 }}
+                  />
                 </div>
+
                 <div>
                   <div className='text-muted font-size-xs'>Modalidad</div>
                   <div className={`font-weight-bold font-size-sm ${seleccion.modalidad ? 'text-dark' : 'text-muted'}`}>
@@ -1446,15 +1427,22 @@ const SeleccionPlazaPage = () => {
                 </div>
               </div>
 
-              {/* Nivel */}
               <div className='d-flex align-items-center mb-4'>
                 <div
                   className='d-flex align-items-center justify-content-center rounded mr-3'
-                  style={{ width: 36, height: 36, background: seleccion.nivel ? '#E8FFF3' : '#F3F6F9', flexShrink: 0 }}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    background: seleccion.nivel ? '#E8FFF3' : '#F3F6F9',
+                    flexShrink: 0,
+                  }}
                 >
-                  <i className='fas fa-layer-group'
-                    style={{ color: seleccion.nivel ? '#1BC5BD' : '#B5B5C3', fontSize: 16 }} />
+                  <i
+                    className='fas fa-layer-group'
+                    style={{ color: seleccion.nivel ? '#1BC5BD' : '#B5B5C3', fontSize: 16 }}
+                  />
                 </div>
+
                 <div>
                   <div className='text-muted font-size-xs'>Nivel</div>
                   <div className={`font-weight-bold font-size-sm ${seleccion.nivel ? 'text-dark' : 'text-muted'}`}>
@@ -1463,25 +1451,29 @@ const SeleccionPlazaPage = () => {
                 </div>
               </div>
 
-              {/* Especialidad */}
               <div className='d-flex align-items-center mb-4'>
                 <div
                   className='d-flex align-items-center justify-content-center rounded mr-3'
                   style={{
-                    width: 36, height: 36, flexShrink: 0,
+                    width: 36,
+                    height: 36,
+                    flexShrink: 0,
                     background: seleccion.especialidad
                       ? `${seleccion.especialidad.color_folder_hex || '#3699FF'}20`
                       : '#F3F6F9',
                   }}
                 >
-                  <i className='fas fa-folder'
+                  <i
+                    className='fas fa-folder'
                     style={{
                       color: seleccion.especialidad
                         ? seleccion.especialidad.color_folder_hex || '#3699FF'
                         : '#B5B5C3',
                       fontSize: 16,
-                    }} />
+                    }}
+                  />
                 </div>
+
                 <div>
                   <div className='text-muted font-size-xs'>Especialidad</div>
                   <div className={`font-weight-bold font-size-sm ${seleccion.especialidad ? 'text-dark' : 'text-muted'}`}>
@@ -1490,30 +1482,40 @@ const SeleccionPlazaPage = () => {
                 </div>
               </div>
 
-              {/* Característica */}
               <div className='d-flex align-items-center mb-6'>
                 <div
                   className='d-flex align-items-center justify-content-center rounded mr-3'
                   style={{
-                    width: 36, height: 36, flexShrink: 0,
-                    background: tipoCaracteristica() === 'BILINGUE' ? '#EEE5FF'
-                      : tipoCaracteristica() === 'CONVENIO' ? '#FFF4DE'
-                        : '#E8FFF3',
+                    width: 36,
+                    height: 36,
+                    flexShrink: 0,
+                    background:
+                      tipoCaracteristica() === 'BILINGUE'
+                        ? '#EEE5FF'
+                        : tipoCaracteristica() === 'CONVENIO'
+                          ? '#FFF4DE'
+                          : '#E8FFF3',
                   }}
                 >
                   <i
-                    className={`fas ${tipoCaracteristica() === 'BILINGUE' ? 'fa-language'
-                      : tipoCaracteristica() === 'CONVENIO' ? 'fa-handshake'
-                        : 'fa-university'
+                    className={`fas ${tipoCaracteristica() === 'BILINGUE'
+                        ? 'fa-language'
+                        : tipoCaracteristica() === 'CONVENIO'
+                          ? 'fa-handshake'
+                          : 'fa-university'
                       }`}
                     style={{
-                      color: tipoCaracteristica() === 'BILINGUE' ? '#8950FC'
-                        : tipoCaracteristica() === 'CONVENIO' ? '#FFA800'
-                          : '#1BC5BD',
+                      color:
+                        tipoCaracteristica() === 'BILINGUE'
+                          ? '#8950FC'
+                          : tipoCaracteristica() === 'CONVENIO'
+                            ? '#FFA800'
+                            : '#1BC5BD',
                       fontSize: 16,
                     }}
                   />
                 </div>
+
                 <div>
                   <div className='text-muted font-size-xs'>Característica</div>
                   <div className='font-weight-bold font-size-sm text-dark'>
@@ -1522,10 +1524,8 @@ const SeleccionPlazaPage = () => {
                 </div>
               </div>
 
-              {/* Separador */}
               <div style={{ height: 1, background: '#EBEDF3', marginBottom: 16 }} />
 
-              {/* Progreso */}
               <div className='text-muted font-size-xs mb-2'>
                 Progreso{' '}
                 <span className='font-weight-bold text-primary'>
@@ -1533,6 +1533,7 @@ const SeleccionPlazaPage = () => {
                 </span>{' '}
                 pasos completados
               </div>
+
               <div className='progress' style={{ height: 6, borderRadius: 3, background: '#EBEDF3' }}>
                 <div
                   className='progress-bar'
@@ -1545,26 +1546,23 @@ const SeleccionPlazaPage = () => {
                 />
               </div>
 
-              {/* Badge modo edición */}
               {modoEditar && (
-                <div className='rounded p-3 mt-5'
-                  style={{ background: '#FFF4DE', borderLeft: '3px solid #FFA800' }}>
+                <div
+                  className='rounded p-3 mt-5'
+                  style={{ background: '#FFF4DE', borderLeft: '3px solid #FFA800' }}
+                >
                   <div className='font-weight-bold font-size-xs mb-1' style={{ color: '#FFA800' }}>
                     <i className='fas fa-pencil-alt mr-1' />
                     Modo edición activo
                   </div>
                   <div className='text-muted font-size-xs'>
-                    Cambia tu selección y presiona{' '}
-                    <strong>Guardar cambios</strong> cuando termines.
+                    Cambia tu selección y presiona <strong>Guardar cambios</strong> cuando termines.
                   </div>
                 </div>
               )}
-
             </div>
           </div>
         </div>
-        {/* ══ FIN PANEL LATERAL ════════════════════════════════════════ */}
-
       </div>
     </div>
   )
