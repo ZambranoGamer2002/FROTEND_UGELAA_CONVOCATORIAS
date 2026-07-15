@@ -11,6 +11,7 @@ import CompletarPerfilPage from './pages/CompletarPerfilPage'
 import AdminNotasBilinguesPage from './pages/admin/AdminNotasBilinguesPage'
 import CatalogoPanelPage from './pages/admin/CatalogoPanelPage'
 import DocentesSancionadosPage from './pages/admin/DocentesSancionadosPage'
+import PrelacionesPanelPage from './pages/admin/PrelacionesPanelPage'
 
 // ✅ Ya NO se importa ConvocatoriasPublicasPage ni SeleccionPlazaPage aquí
 // Ambas están manejadas en BasePage.js con sus guards
@@ -55,6 +56,12 @@ export function Routes() {
       {isAuthorized && (
         <Route path="/admin/catalogo" exact>
           <Layout><CatalogoPanelPage /></Layout>
+        </Route>
+      )}
+
+      {isAuthorized && (
+        <Route path="/admin/prelaciones" exact>
+          <Layout><PrelacionesPanelPage /></Layout>
         </Route>
       )}
 

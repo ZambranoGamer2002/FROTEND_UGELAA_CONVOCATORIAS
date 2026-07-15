@@ -15,7 +15,6 @@ import Swal from 'sweetalert2'
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'
 const HEADER_GRADIENT = 'linear-gradient(135deg, #1e3a5f 0%, #2d5a8e 100%)'
 
-const axiosPublico = axios.create({ baseURL: API_URL })
 
 const useToken = () => {
   const auth = useSelector((s) => s.auth)
@@ -43,6 +42,120 @@ const NivelBadge = ({ nivel }) => {
       {NIVEL_LABEL[nivel] || nivel}
     </span>
   )
+}
+
+const normalizarTexto = (valor) => {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .trim()
+}
+
+const esEstatal = (caracteristica) => {
+  const nombre = normalizarTexto(caracteristica?.nombre)
+  const codigo = normalizarTexto(caracteristica?.codigo)
+
+  return (
+    nombre.includes('ESTATAL') ||
+    codigo.includes('ESTATAL') ||
+    nombre.includes('REGULAR') ||
+    codigo.includes('REGULAR')
+  )
+}
+
+const esBilingue = (caracteristica) => {
+  const nombre = normalizarTexto(caracteristica?.nombre)
+  const codigo = normalizarTexto(caracteristica?.codigo)
+
+  return (
+    caracteristica?.es_bilingue === true ||
+    nombre.includes('BILING') ||
+    codigo.includes('BILING')
+  )
+}
+
+const esConvenio = (caracteristica) => {
+  const nombre = normalizarTexto(caracteristica?.nombre)
+  const codigo = normalizarTexto(caracteristica?.codigo)
+
+  return (
+    caracteristica?.es_convenio === true ||
+    nombre.includes('CONVEN') ||
+    codigo.includes('CONVEN')
+  )
+}
+
+const ordenarCaracteristicas = (lista = []) => {
+  return [...lista].sort((a, b) => {
+    const peso = (item) => {
+      if (esEstatal(item)) return 1
+      if (esBilingue(item)) return 2
+      if (esConvenio(item)) return 3
+      return 4
+    }
+
+    const pesoA = peso(a)
+    const pesoB = peso(b)
+
+    if (pesoA !== pesoB) return pesoA - pesoB
+
+    return String(a?.nombre || '').localeCompare(String(b?.nombre || ''))
+  })
+}
+
+const extraerCaracteristicasDeCatalogo = (modalidades = []) => {
+  const mapa = new Map()
+
+  modalidades.forEach((modalidad) => {
+    ; (modalidad.niveles || []).forEach((nivel) => {
+      ; (nivel.especialidades || []).forEach((especialidad) => {
+        ; (especialidad.caracteristicas || []).forEach((caracteristica) => {
+          if (caracteristica?.id && !mapa.has(caracteristica.id)) {
+            mapa.set(caracteristica.id, caracteristica)
+          }
+        })
+      })
+    })
+  })
+
+  return ordenarCaracteristicas(Array.from(mapa.values()))
+}
+
+const getCaracteristicaVisual = (caracteristica) => {
+  if (esBilingue(caracteristica)) {
+    return {
+      icon: 'fa-language',
+      color: '#8950FC',
+      bg: '#EEE5FF',
+      subtitulo: 'Lengua originaria',
+    }
+  }
+
+  if (esConvenio(caracteristica)) {
+    return {
+      icon: 'fa-handshake',
+      color: '#FFA800',
+      bg: '#FFF4DE',
+      subtitulo: 'Requiere documento',
+    }
+  }
+
+  if (esEstatal(caracteristica)) {
+    return {
+      icon: 'fa-university',
+      color: '#1BC5BD',
+      bg: '#E8FFF3',
+      subtitulo: 'Predeterminado',
+    }
+  }
+
+  return {
+    icon: 'fa-tag',
+    color: '#3699FF',
+    bg: '#EEF6FF',
+    subtitulo: 'Característica habilitada',
+  }
 }
 
 const StepIndicator = ({ pasoActual }) => {
@@ -132,6 +245,7 @@ const SeleccionPlazaPage = () => {
   const [error, setError] = useState(null)
 
   const [catalogo, setCatalogo] = useState([])
+  const [catalogoInfo, setCatalogoInfo] = useState(null)
   const [caracteristicas, setCaracteristicas] = useState([])
 
   const [notaBilingue, setNotaBilingue] = useState(null)
@@ -140,6 +254,7 @@ const SeleccionPlazaPage = () => {
   const [convenioArchivo, setConvenioArchivo] = useState(null)
   const [convenioCodigoAnexo, setConvenioCodigoAnexo] = useState('')
   const fileInputRef = useRef(null)
+  const inicializacionRef = useRef(false)
 
   const [seleccion, setSeleccion] = useState({
     modalidad: null,
@@ -149,9 +264,10 @@ const SeleccionPlazaPage = () => {
   })
 
   useEffect(() => {
-    cargarCatalogo()
+    if (!token) return
+    cargarCatalogo(convocatoriaId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [token, convocatoriaId])
 
   useEffect(() => {
     const esBilingue =
@@ -182,9 +298,10 @@ const SeleccionPlazaPage = () => {
     const modalidadObj = catalogoActual.find((m) => m.id === postulacionData.modalidad_id) || null
     const nivelObj = modalidadObj?.niveles?.find((n) => n.id === postulacionData.nivel_id) || null
     const espObj = nivelObj?.especialidades?.find((e) => e.id === postulacionData.especialidad_id) || null
+    const caracteristicasEsp = espObj?.caracteristicas || caracteristicasActual
     const caractObj = postulacionData.caracteristica_id
-      ? caracteristicasActual.find((c) => c.id === postulacionData.caracteristica_id) || null
-      : null
+      ? caracteristicasEsp.find((c) => c.id === postulacionData.caracteristica_id) || null
+      : caracteristicasEsp.find(esEstatal) || null
 
     setSeleccion({
       modalidad: modalidadObj,
@@ -265,6 +382,9 @@ const SeleccionPlazaPage = () => {
     if (cargando) return
     if (catalogo.length === 0) return
     if (!token) return
+    if (inicializacionRef.current) return
+
+    inicializacionRef.current = true
 
     const abrirWizardNuevaPostulacion = (convId) => {
       setConvocatoriaId(String(convId))
@@ -422,33 +542,39 @@ const SeleccionPlazaPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargando, catalogo])
 
-  const cargarCatalogo = async () => {
+  const cargarCatalogo = async (convId = null) => {
     setCargando(true)
     setError(null)
 
     try {
-      const [resCatalogo, resCaract] = await Promise.allSettled([
-        axiosPublico.get('/catalogo/plaza/cascada'),
-        axiosPublico.get('/catalogo/caracteristicas?solo_docente=true'),
-      ])
+      const params = { permitir_fallback_legacy: true }
 
-      if (resCatalogo.status === 'fulfilled') {
-        setCatalogo(resCatalogo.value.data)
-      } else {
-        throw new Error('No se pudo cargar el catálogo')
+      if (convId) {
+        params.convocatoria_id = Number(convId)
       }
 
-      if (resCaract.status === 'fulfilled') {
-        const sorted = [...resCaract.value.data].sort((a, b) => {
-          if (a.nombre?.toUpperCase().includes('ESTATAL')) return -1
-          if (b.nombre?.toUpperCase().includes('ESTATAL')) return 1
-          return 0
-        })
+      const resCatalogo = await axios.get(`${API_URL}/catalogo/plaza/cascada-efectiva`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params,
+      })
 
-        setCaracteristicas(sorted)
-      }
+      const data = resCatalogo.data || {}
+      const modalidades = Array.isArray(data) ? data : data.modalidades || []
+
+      setCatalogo(modalidades)
+      setCatalogoInfo(Array.isArray(data) ? null : {
+        matriz_id: data.matriz_id,
+        matriz_nombre: data.matriz_nombre,
+        alcance: data.alcance,
+        provincia_id: data.provincia_id,
+        convocatoria_id: data.convocatoria_id,
+        anio: data.anio,
+        mensaje: data.mensaje,
+      })
+      setCaracteristicas(extraerCaracteristicasDeCatalogo(modalidades))
     } catch (err) {
-      setError('No se pudo cargar el catálogo. Verifica tu conexión.')
+      console.error('Error cargando catálogo efectivo:', err)
+      setError('No se pudo cargar el catálogo efectivo de plazas. Verifica tu conexión.')
     } finally {
       setCargando(false)
     }
@@ -496,32 +622,46 @@ const SeleccionPlazaPage = () => {
   }
 
   const seleccionarEspecialidad = (e) => {
+    const caracteristicaDefault = (e.caracteristicas || []).find(esEstatal) || null
+
     setSeleccion((p) => ({
       ...p,
       especialidad: e,
-      caracteristica: null,
+      caracteristica: caracteristicaDefault,
     }))
+    setConvenioArchivo(null)
+    setConvenioCodigoAnexo('')
     setPaso(4)
   }
 
   const seleccionarCaracteristica = (c) => {
     setSeleccion((p) => ({
       ...p,
-      caracteristica: p.caracteristica?.id === c?.id ? null : c,
+      caracteristica: c,
     }))
     setConvenioArchivo(null)
     setConvenioCodigoAnexo('')
   }
 
+  const caracteristicasDisponibles = ordenarCaracteristicas(seleccion.especialidad?.caracteristicas || [])
+  const caracteristicaEstatalDefault = caracteristicasDisponibles.find(esEstatal) || null
+
   const tipoCaracteristica = () => {
-    if (!seleccion.caracteristica) return 'ESTATAL'
+    if (!seleccion.caracteristica) return caracteristicaEstatalDefault ? 'ESTATAL' : 'SIN_SELECCION'
 
-    const nombre = seleccion.caracteristica.nombre?.toUpperCase() || ''
-
-    if (nombre.includes('BILING')) return 'BILINGUE'
-    if (nombre.includes('CONVEN')) return 'CONVENIO'
+    if (esBilingue(seleccion.caracteristica)) return 'BILINGUE'
+    if (esConvenio(seleccion.caracteristica)) return 'CONVENIO'
+    if (esEstatal(seleccion.caracteristica)) return 'ESTATAL'
 
     return 'OTRO'
+  }
+
+  const obtenerCaracteristicaIdFinal = () => {
+    if (seleccion.caracteristica?.id) {
+      return seleccion.caracteristica.id
+    }
+
+    return caracteristicaEstatalDefault?.id || null
   }
 
   const confirmarPostulacion = async () => {
@@ -545,9 +685,21 @@ const SeleccionPlazaPage = () => {
       return
     }
 
-    const esConvenio = seleccion.caracteristica?.nombre?.toUpperCase().includes('CONVEN')
+    const caracteristicaFinalId = obtenerCaracteristicaIdFinal()
 
-    if (esConvenio) {
+    if (!caracteristicaFinalId) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Característica requerida',
+        text: 'Debes seleccionar una característica habilitada para esta especialidad.',
+        confirmButtonColor: '#3699FF',
+      })
+      return
+    }
+
+    const esConvenioSeleccionado = esConvenio(seleccion.caracteristica)
+
+    if (esConvenioSeleccionado) {
       if (!convenioCodigoAnexo?.trim()) {
         Swal.fire({
           icon: 'warning',
@@ -577,7 +729,7 @@ const SeleccionPlazaPage = () => {
         modalidad_id: seleccion.modalidad.id,
         nivel_id: seleccion.nivel.id,
         especialidad_id: seleccion.especialidad.id,
-        caracteristica_id: seleccion.caracteristica?.id || null,
+        caracteristica_id: caracteristicaFinalId,
       }
 
       let postulacionData
@@ -593,7 +745,7 @@ const SeleccionPlazaPage = () => {
             modalidad_id: seleccion.modalidad.id,
             nivel_id: seleccion.nivel.id,
             especialidad_id: seleccion.especialidad.id,
-            caracteristica_id: seleccion.caracteristica?.id || null,
+            caracteristica_id: caracteristicaFinalId,
           }),
         })
 
@@ -636,7 +788,7 @@ const SeleccionPlazaPage = () => {
         postulacionData = data
       }
 
-      if (esConvenio && convenioArchivo && postulacionData?.id) {
+      if (esConvenioSeleccionado && convenioArchivo && postulacionData?.id) {
         const formData = new FormData()
         formData.append('archivo', convenioArchivo)
         formData.append('codigo_anexo', convenioCodigoAnexo)
@@ -657,26 +809,27 @@ const SeleccionPlazaPage = () => {
         icon: 'success',
         title: modoEditar ? 'Plaza actualizada' : 'Postulación creada',
         html: `
-          <p style="color:#3F4254;margin-bottom:12px">
-            ${modoEditar ? 'Tu selección de plaza fue actualizada.' : 'Tu postulación fue registrada exitosamente.'}
-          </p>
-          <div style="background:#F3F6F9;border-radius:8px;padding:12px;text-align:left">
-            <div style="font-size:13px;color:#3F4254;line-height:1.8">
-              <strong>Modalidad:</strong> ${seleccion.modalidad.nombre}<br/>
-              <strong>Nivel:</strong> ${seleccion.nivel.nombre}<br/>
-              <strong>Especialidad:</strong> ${seleccion.especialidad.nombre}
-              ${seleccion.caracteristica ? `<br/><strong>Característica:</strong> ${seleccion.caracteristica.nombre}` : ''}
-            </div>
-          </div>
-          <p style="margin-top:12px;font-size:12px;color:#7E8299">
-            Ahora sube los documentos requeridos para completar tu expediente.
-          </p>
-        `,
+    <p style="color:#3F4254;margin-bottom:12px">
+      ${modoEditar ? 'Tu selección de plaza fue actualizada.' : 'Tu postulación fue registrada exitosamente.'}
+    </p>
+    <div style="background:#F3F6F9;border-radius:8px;padding:12px;text-align:left">
+      <div style="font-size:13px;color:#3F4254;line-height:1.8">
+        <strong>Modalidad:</strong> ${seleccion.modalidad.nombre}<br/>
+        <strong>Nivel:</strong> ${seleccion.nivel.nombre}<br/>
+        <strong>Especialidad:</strong> ${seleccion.especialidad.nombre}
+        ${seleccion.caracteristica ? `<br/><strong>Característica:</strong> ${seleccion.caracteristica.nombre}` : ''}
+      </div>
+    </div>
+    <p style="margin-top:12px;font-size:12px;color:#7E8299">
+      Ahora registra tus requisitos de formación académica para continuar con tu expediente.
+    </p>
+  `,
         confirmButtonColor: '#1BC5BD',
-        confirmButtonText: 'Ir a documentos',
+        confirmButtonText: 'Ir a requisitos de formación',
       })
 
-      history.push('/mis-postulaciones')
+      history.push(`/requisitos-formacion/${postulacionData.id}`)
+
     } catch (err) {
       Swal.fire({
         icon: 'error',
@@ -905,6 +1058,23 @@ const SeleccionPlazaPage = () => {
         </div>
       )}
 
+      {catalogoInfo?.matriz_nombre && (
+        <div
+          className='rounded p-4 mb-5 d-flex align-items-center'
+          style={{ background: '#EEF6FF', borderLeft: '4px solid #3699FF' }}
+        >
+          <i className='fas fa-sitemap mr-3' style={{ color: '#3699FF', fontSize: 18 }} />
+          <div>
+            <div className='font-weight-bold' style={{ color: '#3699FF', fontSize: 13 }}>
+              Catálogo efectivo cargado
+            </div>
+            <div className='text-muted font-size-sm'>
+              {catalogoInfo.matriz_nombre} · Alcance {catalogoInfo.alcance || 'Base'}.
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className='row'>
         <div className='col-xl-8 col-lg-8'>
           <div className='card card-custom'>
@@ -1077,8 +1247,14 @@ const SeleccionPlazaPage = () => {
                                 <i className='fas fa-folder' style={{ color: colorFolder, fontSize: 22 }} />
                               </div>
 
-                              <div className='font-weight-bolder text-dark'>
-                                {esp.nombre}
+                              <div>
+                                <div className='font-weight-bolder text-dark'>
+                                  {esp.nombre}
+                                </div>
+                                <div className='text-muted font-size-xs mt-1'>
+                                  <i className='fas fa-tags mr-1' />
+                                  {esp.caracteristicas?.length || 0} característica(s)
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -1153,99 +1329,51 @@ const SeleccionPlazaPage = () => {
                     Característica de la plaza
                   </h6>
 
-                  <div className='row mb-5'>
-                    <div className='col-md-4 mb-3'>
-                      <div
-                        className='border rounded p-4 text-center'
-                        style={{
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                          borderColor: !seleccion.caracteristica ? '#1BC5BD' : '#EBEDF3',
-                          background: !seleccion.caracteristica ? '#E8FFF3' : '#fff',
-                          boxShadow: !seleccion.caracteristica ? '0 0 0 2px #1BC5BD33' : 'none',
-                        }}
-                        onClick={() => {
-                          setSeleccion((p) => ({ ...p, caracteristica: null }))
-                          setConvenioArchivo(null)
-                          setConvenioCodigoAnexo('')
-                        }}
-                      >
-                        <div
-                          className='d-flex align-items-center justify-content-center rounded-circle mx-auto mb-3'
-                          style={{ width: 48, height: 48, background: '#E8FFF3' }}
-                        >
-                          <i className='fas fa-university' style={{ color: '#1BC5BD', fontSize: 20 }} />
-                        </div>
-
-                        <div className='font-weight-bolder text-dark'>Estatal</div>
-                        <div className='text-muted font-size-xs mt-1'>Predeterminado</div>
+                  {caracteristicasDisponibles.length === 0 ? (
+                    <div className='rounded p-4 mb-5' style={{ background: '#FFF5F8', borderLeft: '4px solid #F64E60' }}>
+                      <div className='font-weight-bold mb-1' style={{ color: '#F64E60' }}>
+                        <i className='fas fa-exclamation-triangle mr-2' />
+                        Sin características habilitadas
+                      </div>
+                      <div className='text-muted font-size-sm'>
+                        Esta especialidad no tiene características disponibles en la matriz efectiva.
                       </div>
                     </div>
-
-                    {caracteristicas
-                      .filter((c) => c.nombre?.toUpperCase().includes('BILING'))
-                      .map((caract) => {
+                  ) : (
+                    <div className='row mb-5'>
+                      {caracteristicasDisponibles.map((caract) => {
+                        const visual = getCaracteristicaVisual(caract)
                         const seleccionado = seleccion.caracteristica?.id === caract.id
 
                         return (
                           <div key={caract.id} className='col-md-4 mb-3'>
                             <div
-                              className='border rounded p-4 text-center'
+                              className='border rounded p-4 text-center h-100'
                               style={{
                                 cursor: 'pointer',
                                 transition: 'all 0.2s',
-                                borderColor: seleccionado ? '#8950FC' : '#EBEDF3',
-                                background: seleccionado ? '#EEE5FF' : '#fff',
-                                boxShadow: seleccionado ? '0 0 0 2px #8950FC33' : 'none',
+                                borderColor: seleccionado ? visual.color : '#EBEDF3',
+                                background: seleccionado ? visual.bg : '#fff',
+                                boxShadow: seleccionado ? `0 0 0 2px ${visual.color}33` : 'none',
                               }}
                               onClick={() => seleccionarCaracteristica(caract)}
                             >
                               <div
                                 className='d-flex align-items-center justify-content-center rounded-circle mx-auto mb-3'
-                                style={{ width: 48, height: 48, background: '#EEE5FF' }}
+                                style={{ width: 48, height: 48, background: visual.bg }}
                               >
-                                <i className='fas fa-language' style={{ color: '#8950FC', fontSize: 20 }} />
+                                <i className={`fas ${visual.icon}`} style={{ color: visual.color, fontSize: 20 }} />
                               </div>
 
                               <div className='font-weight-bolder text-dark'>{caract.nombre}</div>
-                              <div className='text-muted font-size-xs mt-1'>Lengua originaria</div>
+                              <div className='text-muted font-size-xs mt-1'>{visual.subtitulo}</div>
                             </div>
                           </div>
                         )
                       })}
+                    </div>
+                  )}
 
-                    {caracteristicas
-                      .filter((c) => c.nombre?.toUpperCase().includes('CONVEN'))
-                      .map((caract) => {
-                        const seleccionado = seleccion.caracteristica?.id === caract.id
-
-                        return (
-                          <div key={caract.id} className='col-md-4 mb-3'>
-                            <div
-                              className='border rounded p-4 text-center'
-                              style={{
-                                cursor: 'pointer',
-                                transition: 'all 0.2s',
-                                borderColor: seleccionado ? '#FFA800' : '#EBEDF3',
-                                background: seleccionado ? '#FFF4DE' : '#fff',
-                                boxShadow: seleccionado ? '0 0 0 2px #FFA80033' : 'none',
-                              }}
-                              onClick={() => seleccionarCaracteristica(caract)}
-                            >
-                              <div
-                                className='d-flex align-items-center justify-content-center rounded-circle mx-auto mb-3'
-                                style={{ width: 48, height: 48, background: '#FFF4DE' }}
-                              >
-                                <i className='fas fa-handshake' style={{ color: '#FFA800', fontSize: 20 }} />
-                              </div>
-
-                              <div className='font-weight-bolder text-dark'>{caract.nombre}</div>
-                              <div className='text-muted font-size-xs mt-1'>Requiere documento</div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                  </div>
 
                   {tipoCaracteristica() === 'BILINGUE' && (
                     <div className='rounded p-5 mb-5' style={{ background: '#EEE5FF', borderLeft: '4px solid #8950FC' }}>
@@ -1499,10 +1627,10 @@ const SeleccionPlazaPage = () => {
                 >
                   <i
                     className={`fas ${tipoCaracteristica() === 'BILINGUE'
-                        ? 'fa-language'
-                        : tipoCaracteristica() === 'CONVENIO'
-                          ? 'fa-handshake'
-                          : 'fa-university'
+                      ? 'fa-language'
+                      : tipoCaracteristica() === 'CONVENIO'
+                        ? 'fa-handshake'
+                        : 'fa-university'
                       }`}
                     style={{
                       color:
@@ -1519,7 +1647,7 @@ const SeleccionPlazaPage = () => {
                 <div>
                   <div className='text-muted font-size-xs'>Característica</div>
                   <div className='font-weight-bold font-size-sm text-dark'>
-                    {seleccion.caracteristica?.nombre || 'Estatal (predeterminado)'}
+                    {seleccion.caracteristica?.nombre || 'Sin seleccionar'}
                   </div>
                 </div>
               </div>

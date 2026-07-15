@@ -9,23 +9,27 @@ import MiPerfilPage from "./pages/MiPerfilPage";
 import ConvocatoriasPublicasPage from "./pages/ConvocatoriasPublicasPage";
 import SeleccionPlazaPage from "./pages/SeleccionPlazaPage";
 import MisPostulacionesPage from "./pages/MisPostulacionesPage";
-import ReportesConvocatoriaPage from './pages/ReportesConvocatoriaPage'
-import GestionUsuarios from './pages/GestionUsuarios'
+import ReportesConvocatoriaPage from "./pages/ReportesConvocatoriaPage";
+import GestionUsuarios from "./pages/GestionUsuarios";
 
-// ── Admin ────────────────────────────────────────────────────────────────────
-import ConvocatoriasPage from './pages/admin/ConvocatoriasPage'
-import CrearConvocatoriaPage from './pages/admin/CrearConvocatoriaPage'
-import CatalogoPanelPage from './pages/admin/CatalogoPanelPage'
+// Admin
+import ConvocatoriasPage from "./pages/admin/ConvocatoriasPage";
+import CrearConvocatoriaPage from "./pages/admin/CrearConvocatoriaPage";
+import CatalogoPanelPage from "./pages/admin/CatalogoPanelPage";
+import RequisitosFormacionPage from './pages/RequisitosFormacionPage'
 
 const GoogleMaterialPage = lazy(() =>
   import("./modules/GoogleMaterialExamples/GoogleMaterialPage")
 );
+
 const ReactBootstrapPage = lazy(() =>
   import("./modules/ReactBootstrapExamples/ReactBootstrapPage")
 );
+
 const ECommercePage = lazy(() =>
   import("./modules/ECommerce/pages/eCommercePage")
 );
+
 const UserProfilepage = lazy(() =>
   import("./modules/UserProfile/UserProfilePage")
 );
@@ -35,7 +39,6 @@ export default function BasePage() {
   const auth = useSelector((state) => state.auth);
   const user = auth?.user || {};
 
-  // ✅ Fix definitivo — cubre hidratación tardía de Redux
   const roleNivel = Number(
     user?.role_nivel ??
     user?.nivel ??
@@ -43,79 +46,148 @@ export default function BasePage() {
     5
   );
 
-  console.log("🔍 roleNivel resuelto:", roleNivel, "| keys del user:", Object.keys(user))
-
+  const esSuperAdmin = roleNivel === 1;
+  const esAdmin = roleNivel === 2;
+  const esComision = roleNivel === 3;
+  const esDocente = roleNivel === 5;
+  const esStaff = roleNivel <= 3;
 
   useEffect(() => {
     if (!user || Object.keys(user).length === 0) return;
+
     const currentPath = window.location.pathname;
-    if (roleNivel === 5 && currentPath === "/dashboard") {
+
+    if (esDocente && currentPath === "/dashboard") {
       history.push("/convocatorias/publicas");
     }
-  }, [user, history, roleNivel]);
+  }, [user, history, esDocente]);
 
   return (
     <Suspense fallback={<LayoutSplashScreen />}>
       <Switch>
-
-        {/* ── Perfil e Inicio ── */}
+        {/* Perfil e inicio */}
         <ContentRoute path="/mi-perfil" component={MiPerfilPage} />
         <Redirect exact from="/" to="/mi-perfil" />
         <ContentRoute path="/dashboard" component={DashboardPage} />
 
-        {/* ── Docente ── */}
-        <ContentRoute path="/seleccion-plaza" component={SeleccionPlazaPage} />
-        <ContentRoute path="/mis-postulaciones" component={MisPostulacionesPage} />
-
-        {/* ✅ CRÍTICO: /convocatorias/publicas SIEMPRE antes de /convocatorias */}
-        {/* ── Vista Docente ── */}
+        {/* Docente: Selección de Plaza */}
         <Route
-          path="/convocatorias/publicas"
+          path="/seleccion-plaza"
+          exact
           render={(props) =>
-            roleNivel === 5
-              ? <ConvocatoriasPublicasPage {...props} />
-              : <Redirect to="/convocatorias" />
+            esDocente ? (
+              <SeleccionPlazaPage {...props} />
+            ) : (
+              <Redirect to="/dashboard" />
+            )
           }
         />
 
-        {/* ── Vista Admin/SuperAdmin ── */}
+        {/* Docente: Formación Académica y Profesional */}
+        <Route
+          path="/requisitos-formacion/:postulacionId?"
+          exact
+          render={(props) =>
+            esDocente ? (
+              <RequisitosFormacionPage {...props} />
+            ) : (
+              <Redirect to="/dashboard" />
+            )
+          }
+        />
+
+        {/* Docente: Mis Postulaciones */}
+        <Route
+          path="/mis-postulaciones"
+          exact
+          render={(props) =>
+            esDocente ? (
+              <MisPostulacionesPage {...props} />
+            ) : (
+              <Redirect to="/dashboard" />
+            )
+          }
+        />
+
+        {/* Vista docente: convocatorias disponibles */}
+        <Route
+          path="/convocatorias/publicas"
+          exact
+          render={(props) =>
+            esDocente ? (
+              <ConvocatoriasPublicasPage {...props} />
+            ) : (
+              <Redirect to="/convocatorias" />
+            )
+          }
+        />
+
+        {/* Vista Admin / SuperAdmin / Comisión */}
         <Route
           path="/convocatorias"
           exact
           render={(props) =>
-            roleNivel === 1 || roleNivel === 2
-              ? <ConvocatoriasPage {...props} />
-              : <Redirect to="/convocatorias/publicas" />
+            esStaff ? (
+              <ConvocatoriasPage {...props} />
+            ) : (
+              <Redirect to="/convocatorias/publicas" />
+            )
           }
         />
 
-        {/* ── Admin: Crear Convocatoria ── */}
+        {/* Crear Convocatoria */}
         <Route
           path="/crear-convocatoria"
           exact
           render={(props) =>
-            roleNivel === 1 || roleNivel === 2
-              ? <CrearConvocatoriaPage {...props} />
-              : <Redirect to="/convocatorias" />
+            esSuperAdmin || esAdmin ? (
+              <CrearConvocatoriaPage {...props} />
+            ) : (
+              <Redirect to="/convocatorias" />
+            )
           }
         />
 
-        {/* ── Admin: Catálogo ── */}
+        {/* Panel de Catálogo */}
         <Route
           path="/admin/catalogo"
           exact
           render={(props) =>
-            roleNivel === 1
-              ? <CatalogoPanelPage {...props} />
-              : <Redirect to="/dashboard" />
+            esSuperAdmin ? (
+              <CatalogoPanelPage {...props} />
+            ) : (
+              <Redirect to="/dashboard" />
+            )
           }
         />
 
-        {/* ── Reportes y Usuarios ── */}
-        <ContentRoute path="/reportes/convocatorias" component={ReportesConvocatoriaPage} />
-        <ContentRoute path="/usuarios" component={GestionUsuarios} />
+        {/* Reportes de Convocatorias */}
+        <Route
+          path="/reportes/convocatorias"
+          exact
+          render={(props) =>
+            esStaff ? (
+              <ReportesConvocatoriaPage {...props} />
+            ) : (
+              <Redirect to="/dashboard" />
+            )
+          }
+        />
 
-        {/* ── Metronic ── */}
+        {/* Gestión de Usuarios */}
+        <Route
+          path="/usuarios"
+          exact
+          render={(props) =>
+            esSuperAdmin || esAdmin ? (
+              <GestionUsuarios {...props} />
+            ) : (
+              <Redirect to="/dashboard" />
+            )
+          }
+        />
+
+        {/* Metronic */}
         <ContentRoute path="/builder" component={BuilderPage} />
         <ContentRoute path="/my-page" component={MyPage} />
         <Route path="/google-material" component={GoogleMaterialPage} />

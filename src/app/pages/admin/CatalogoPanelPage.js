@@ -3,7 +3,7 @@
  * Panel SuperAdmin para gestionar:
  * Modalidades → Niveles → Especialidades → Características
  */
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useSelector } from 'react-redux'
 import axios from 'axios'
 import Swal from 'sweetalert2'
@@ -60,6 +60,45 @@ const Badge = ({ label, bg, color }) => (
     </span>
 )
 
+const ESTADOS_MATRIZ = {
+    BORRADOR: { label: 'Borrador', bg: '#FFF4DE', color: '#FFA800', icon: 'fa-edit' },
+    PUBLICADA: { label: 'Publicada', bg: '#E8FFF3', color: '#1BC5BD', icon: 'fa-check-circle' },
+    CERRADA: { label: 'Cerrada', bg: '#F3F6F9', color: '#7E8299', icon: 'fa-lock' },
+}
+
+const ALCANCES_MATRIZ = {
+    GLOBAL: { label: 'Global', bg: '#EEF6FF', color: '#3699FF' },
+    PROVINCIA: { label: 'Provincia / UGEL', bg: '#EEE5FF', color: '#8950FC' },
+    CONVOCATORIA: { label: 'Convocatoria', bg: '#FFF4DE', color: '#FFA800' },
+}
+
+const EstadoMatrizBadge = ({ estado }) => {
+    const c = ESTADOS_MATRIZ[estado] || ESTADOS_MATRIZ.BORRADOR
+
+    return (
+        <span
+            className="label label-inline font-weight-bold"
+            style={{ background: c.bg, color: c.color }}
+        >
+            <i className={`fas ${c.icon} mr-1`} />
+            {c.label}
+        </span>
+    )
+}
+
+const AlcanceMatrizBadge = ({ alcance }) => {
+    const c = ALCANCES_MATRIZ[alcance] || ALCANCES_MATRIZ.GLOBAL
+
+    return (
+        <span
+            className="label label-inline font-weight-bold"
+            style={{ background: c.bg, color: c.color }}
+        >
+            {c.label}
+        </span>
+    )
+}
+
 const SpinnerCarga = ({ texto }) => (
     <div className="text-center py-8">
         <div className="spinner-border text-primary mb-3" style={{ width: 32, height: 32 }} />
@@ -90,6 +129,7 @@ const TABS = [
     { id: 'niveles', label: 'Niveles', icon: 'fa-layer-group' },
     { id: 'especialidades', label: 'Especialidades', icon: 'fa-folder' },
     { id: 'caracteristicas', label: 'Características', icon: 'fa-tags' },
+    { id: 'matrices', label: 'Matrices de Plaza', icon: 'fa-sitemap' },
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -199,15 +239,35 @@ const SelectorColor = ({ valor, onChange }) => (
 // COMPONENTE PRINCIPAL
 // ─────────────────────────────────────────────────────────────────────────────
 const CatalogoPanelPage = () => {
+    const auth = useSelector((state) => state.auth)
     const token = useToken()
     const headers = { Authorization: `Bearer ${token}` }
 
     const [tabActivo, setTabActivo] = useState('modalidades')
 
+    const [roleInfo, setRoleInfo] = useState(null)
+    const [provinciaUsuarioId, setProvinciaUsuarioId] = useState(null)
+    const [provinciaUsuarioNombre, setProvinciaUsuarioNombre] = useState('')
+
+    const [vistaCatalogoBase, setVistaCatalogoBase] = useState('modalidades')
+
+    const [filtrosMatriz, setFiltrosMatriz] = useState({
+        modalidad_id: '',
+        nivel_id: '',
+        especialidad_id: '',
+    })
+
     const [modalidades, setModalidades] = useState([])
     const [niveles, setNiveles] = useState([])
     const [especialidades, setEspecialidades] = useState([])
     const [caracteristicas, setCaracteristicas] = useState([])
+
+    const [matrices, setMatrices] = useState([])
+    const [anioMatriz, setAnioMatriz] = useState(new Date().getFullYear())
+    const [matrizSeleccionada, setMatrizSeleccionada] = useState(null)
+    const [itemsMatriz, setItemsMatriz] = useState([])
+    const [modalItemsMatrizAbierto, setModalItemsMatrizAbierto] = useState(false)
+    const [cargandoItemsMatriz, setCargandoItemsMatriz] = useState(false)
 
     const [filtroModalidadNivel, setFiltroModalidadNivel] = useState('')
     const [filtroModalidadEsp, setFiltroModalidadEsp] = useState('')
@@ -221,23 +281,57 @@ const CatalogoPanelPage = () => {
 
     // ── Formularios ────────────────────────────────────────────────────────────
     const FORM_MODALIDAD_VACIO = {
-        nombre: '', codigo: '', descripcion: '', orden: 1, activo: true
+        nombre: '',
+        codigo: '',
+        descripcion: '',
+        orden: 1,
+        activo: true,
     }
+
     const FORM_NIVEL_VACIO = {
-        nombre: '', codigo: '', descripcion: '', modalidad_id: '', orden: 1, activo: true
+        nombre: '',
+        codigo: '',
+        descripcion: '',
+        modalidad_id: '',
+        orden: 1,
+        activo: true,
     }
-    // ✅ FIX: _modalidadFiltro es campo auxiliar de UI, no se envía al backend
+
+    // _modalidadFiltro es campo auxiliar de UI, no se envía al backend
     const FORM_ESP_VACIO = {
-        nombre: '', codigo: '', descripcion: '',
-        nivel_id: '', _modalidadFiltro: '',
-        color_folder: 'AMARILLO', color_folder_hex: '#FFD700',
-        color_folder_rgb: '', anexo6_numero: '', anexo6_descripcion: '',
-        orden: 1, activo: true,
+        nombre: '',
+        codigo: '',
+        descripcion: '',
+        nivel_id: '',
+        _modalidadFiltro: '',
+        color_folder: 'AMARILLO',
+        color_folder_hex: '#FFD700',
+        color_folder_rgb: '',
+        anexo6_numero: '',
+        anexo6_descripcion: '',
+        orden: 1,
+        activo: true,
     }
+
     const FORM_CARACT_VACIO = {
-        nombre: '', codigo: '', descripcion: '',
-        es_bilingue: false, es_convenio: false,
-        activo: true, visible_docente: true
+        nombre: '',
+        codigo: '',
+        descripcion: '',
+        es_bilingue: false,
+        es_convenio: false,
+        activo: true,
+        visible_docente: true,
+    }
+
+    const FORM_ITEM_MATRIZ_VACIO = {
+        id: null,
+        modalidad_id: '',
+        nivel_id: '',
+        especialidad_id: '',
+        caracteristica_id: '',
+        orden: 1,
+        observaciones: '',
+        activo: true,
     }
 
     const [formModalidad, setFormModalidad] = useState(FORM_MODALIDAD_VACIO)
@@ -245,19 +339,70 @@ const CatalogoPanelPage = () => {
     const [formEsp, setFormEsp] = useState(FORM_ESP_VACIO)
     const [formCaract, setFormCaract] = useState(FORM_CARACT_VACIO)
 
+    const [mostrarPanelItemMatriz, setMostrarPanelItemMatriz] = useState(false)
+    const [guardandoItemMatriz, setGuardandoItemMatriz] = useState(false)
+    const [editandoItemMatriz, setEditandoItemMatriz] = useState(false)
+    const [formItemMatriz, setFormItemMatriz] = useState(FORM_ITEM_MATRIZ_VACIO)
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CARGA DE DATOS
     // ═══════════════════════════════════════════════════════════════════════════
     useEffect(() => { cargarTodo() }, []) // eslint-disable-line
 
+    const cargarRol = async () => {
+        if (!token) return null
+
+        try {
+            const resp = await fetch(`${API_URL}/roles/mis-permisos`, {
+                headers: { Authorization: `Bearer ${token}` },
+            })
+
+            if (!resp.ok) return null
+
+            const data = await resp.json()
+
+            const provinciaId =
+                data?.usuario?.provincia_id ||
+                data?.user?.provincia_id ||
+                data?.provincia_id ||
+                auth?.user?.provincia_id ||
+                auth?.user?.usuario?.provincia_id ||
+                null
+
+            const provinciaNombre =
+                data?.usuario?.provincia_nombre ||
+                data?.user?.provincia_nombre ||
+                data?.provincia_nombre ||
+                auth?.user?.provincia_nombre ||
+                auth?.user?.usuario?.provincia_nombre ||
+                ''
+
+            setRoleInfo(data.role || null)
+            setProvinciaUsuarioId(provinciaId)
+            setProvinciaUsuarioNombre(provinciaNombre)
+
+            return {
+                role: data.role || null,
+                provincia_id: provinciaId,
+                provincia_nombre: provinciaNombre,
+            }
+        } catch (err) {
+            console.warn('No se pudo cargar rol para catálogo:', err)
+            return null
+        }
+    }
+
     const cargarTodo = async () => {
         setCargando(true)
         try {
+            await cargarRol()
+
             await Promise.all([
                 cargarModalidades(),
                 cargarNiveles(),
                 cargarEspecialidades(),
                 cargarCaracteristicas(),
+                cargarMatrices(),
             ])
         } finally {
             setCargando(false)
@@ -302,6 +447,440 @@ const CatalogoPanelPage = () => {
         } catch (err) { console.error('Error características:', err) }
     }
 
+    const cargarMatrices = async () => {
+        try {
+            const resp = await axios.get(`${API_URL}/catalogo/plaza/matrices`, {
+                headers,
+                params: {
+                    anio: anioMatriz || undefined,
+                },
+            })
+
+            const data = resp.data
+            const lista = Array.isArray(data) ? data : data.data || []
+
+            setMatrices(lista)
+
+            if (lista.length > 0) {
+                const actual = matrizSeleccionada?.id
+                    ? lista.find((m) => Number(m.id) === Number(matrizSeleccionada.id))
+                    : null
+
+                await seleccionarMatriz(actual || lista[0])
+            } else {
+                setMatrizSeleccionada(null)
+                setItemsMatriz([])
+            }
+        } catch (err) {
+            console.error('Error matrices de plaza:', err)
+        }
+    }
+
+    const inicializarMatrizGlobal = async () => {
+        const resultado = await Swal.fire({
+            icon: 'question',
+            title: 'Inicializar matriz global',
+            html: `
+            <div style="text-align:left;font-size:14px;color:#3F4254">
+                Se creará una matriz global usando el catálogo actual de modalidades,
+                niveles, especialidades y características activas.
+                <br/><br/>
+                <strong>Año:</strong> ${anioMatriz}
+            </div>
+        `,
+            showCancelButton: true,
+            confirmButtonColor: THEME.accent,
+            cancelButtonColor: THEME.muted,
+            confirmButtonText: 'Sí, inicializar',
+            cancelButtonText: 'Cancelar',
+        })
+
+        if (!resultado.isConfirmed) return
+
+        try {
+            setCargando(true)
+
+            await axios.post(`${API_URL}/catalogo/plaza/inicializar-global`, null, {
+                headers,
+                params: {
+                    anio: anioMatriz,
+                    nombre: `Matriz Global de Catálogo de Plaza ${anioMatriz}`,
+                    publicar: true,
+                },
+            })
+
+            await Swal.fire({
+                icon: 'success',
+                title: 'Matriz inicializada',
+                text: 'La matriz global fue creada o ya existía correctamente.',
+                confirmButtonColor: THEME.accent,
+                timer: 2200,
+                showConfirmButton: false,
+            })
+
+            await cargarMatrices()
+        } catch (err) {
+            const msg = err.response?.data?.detail || 'No se pudo inicializar la matriz global.'
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: msg,
+                confirmButtonColor: THEME.accent,
+            })
+        } finally {
+            setCargando(false)
+        }
+    }
+
+    const verItemsMatriz = async (matriz) => {
+        setMatrizSeleccionada(matriz)
+        setItemsMatriz([])
+        setModalItemsMatrizAbierto(true)
+        setCargandoItemsMatriz(true)
+
+        try {
+            const resp = await axios.get(`${API_URL}/catalogo/plaza/matrices/${matriz.id}/items`, {
+                headers,
+                params: {
+                    solo_activos: true,
+                },
+            })
+
+            const data = resp.data
+            setItemsMatriz(Array.isArray(data) ? data : data.data || [])
+        } catch (err) {
+            const msg = err.response?.data?.detail || 'No se pudieron cargar los items de la matriz.'
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: msg,
+                confirmButtonColor: THEME.accent,
+            })
+        } finally {
+            setCargandoItemsMatriz(false)
+        }
+    }
+
+    const cerrarModalItemsMatriz = () => {
+        setModalItemsMatrizAbierto(false)
+        setMatrizSeleccionada(null)
+        setItemsMatriz([])
+    }
+
+    const seleccionarMatriz = async (matriz) => {
+        if (!matriz?.id) return
+
+        setMatrizSeleccionada(matriz)
+        setItemsMatriz([])
+        setCargandoItemsMatriz(true)
+
+        try {
+            const resp = await axios.get(`${API_URL}/catalogo/plaza/matrices/${matriz.id}/items`, {
+                headers,
+                params: {
+                    solo_activos: false,
+                },
+            })
+
+            const data = resp.data
+            setItemsMatriz(Array.isArray(data) ? data : data.data || [])
+        } catch (err) {
+            const msg = err.response?.data?.detail || 'No se pudieron cargar las combinaciones de la matriz.'
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: msg,
+                confirmButtonColor: THEME.accent,
+            })
+        } finally {
+            setCargandoItemsMatriz(false)
+        }
+    }
+
+    const clonarMatrizAProvincia = async (matriz) => {
+        if (!matriz?.id) return
+
+        const resultado = await Swal.fire({
+            icon: 'question',
+            title: 'Clonar matriz a provincia',
+            html: `
+            <div style="text-align:left;font-size:14px;color:#3F4254">
+                Se creará una matriz provincial usando como base:
+                <br/>
+                <strong>${matriz.nombre}</strong>
+                <br/><br/>
+
+                <label style="font-weight:600;margin-bottom:6px;display:block">
+                    ID de provincia
+                </label>
+                <input 
+                    id="provincia_id_clonar" 
+                    type="number" 
+                    class="swal2-input" 
+                    placeholder="Ej: 1"
+                    style="margin:0;width:100%"
+                />
+
+                <small style="display:block;margin-top:8px;color:#7E8299">
+                    Por ahora ingresa el ID de la provincia. Luego lo conectamos a un selector visual.
+                </small>
+            </div>
+        `,
+            showCancelButton: true,
+            confirmButtonColor: THEME.accent,
+            cancelButtonColor: THEME.muted,
+            confirmButtonText: 'Clonar matriz',
+            cancelButtonText: 'Cancelar',
+            preConfirm: () => {
+                const provinciaId = document.getElementById('provincia_id_clonar')?.value
+
+                if (!provinciaId || Number(provinciaId) <= 0) {
+                    Swal.showValidationMessage('Debes ingresar un ID de provincia válido.')
+                    return false
+                }
+
+                return Number(provinciaId)
+            },
+        })
+
+        if (!resultado.isConfirmed) return
+
+        try {
+            setCargando(true)
+
+            await axios.post(
+                `${API_URL}/catalogo/plaza/matrices/${matriz.id}/clonar-provincia`,
+                {
+                    provincia_id: resultado.value,
+                    anio: matriz.anio || anioMatriz,
+                    nombre: `Matriz Provincial de Catálogo de Plaza ${matriz.anio || anioMatriz}`,
+                    publicar: true,
+                },
+                { headers }
+            )
+
+            await Swal.fire({
+                icon: 'success',
+                title: 'Matriz provincial creada',
+                text: 'La matriz fue clonada correctamente para la provincia seleccionada.',
+                confirmButtonColor: THEME.accent,
+                timer: 2200,
+                showConfirmButton: false,
+            })
+
+            await cargarMatrices()
+        } catch (err) {
+            const msg = err.response?.data?.detail || 'No se pudo clonar la matriz a provincia.'
+
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: msg,
+                confirmButtonColor: THEME.accent,
+            })
+        } finally {
+            setCargando(false)
+        }
+    }
+
+    const crearMatrizProvincialDesdeGlobal = async () => {
+        if (!esAdmin) return
+
+        if (!provinciaUsuarioId) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Provincia no asignada',
+                text: 'Tu usuario administrador no tiene provincia asignada. No se puede crear una matriz provincial.',
+                confirmButtonColor: THEME.warning,
+            })
+            return
+        }
+
+        if (!matrizGlobalPublicada?.id) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Sin matriz global publicada',
+                text: 'Primero debe existir una matriz global publicada para usarla como referencia.',
+                confirmButtonColor: THEME.warning,
+            })
+            return
+        }
+
+        if (matrizProvincialUsuario?.id) {
+            Swal.fire({
+                icon: 'info',
+                title: 'Matriz provincial existente',
+                text: 'Tu provincia ya tiene una matriz provincial activa. Puedes trabajar sobre esa matriz.',
+                confirmButtonColor: THEME.accent,
+            })
+
+            await seleccionarMatriz(matrizProvincialUsuario)
+            return
+        }
+
+        const resultado = await Swal.fire({
+            icon: 'question',
+            title: 'Crear matriz provincial',
+            html: `
+            <div style="text-align:left;font-size:14px;color:#3F4254">
+                Se creará una matriz provincial usando como base:
+                <br/>
+                <strong>${matrizGlobalPublicada.nombre}</strong>
+                <br/><br/>
+                <strong>Provincia:</strong> ${provinciaUsuarioNombre || `ID ${provinciaUsuarioId}`}
+                <br/><br/>
+                Luego podrás adaptar las combinaciones solo para tu provincia.
+            </div>
+        `,
+            showCancelButton: true,
+            confirmButtonColor: THEME.accent,
+            cancelButtonColor: THEME.muted,
+            confirmButtonText: 'Crear matriz provincial',
+            cancelButtonText: 'Cancelar',
+        })
+
+        if (!resultado.isConfirmed) return
+
+        try {
+            setCargando(true)
+
+            await axios.post(
+                `${API_URL}/catalogo/plaza/matrices/${matrizGlobalPublicada.id}/clonar-provincia`,
+                {
+                    provincia_id: Number(provinciaUsuarioId),
+                    anio: matrizGlobalPublicada.anio || anioMatriz,
+                    nombre: `Matriz Provincial de Catálogo de Plaza ${matrizGlobalPublicada.anio || anioMatriz}`,
+                    publicar: true,
+                },
+                { headers }
+            )
+
+            await Swal.fire({
+                icon: 'success',
+                title: 'Matriz provincial creada',
+                text: 'Ahora puedes adaptar las combinaciones de plaza para tu provincia.',
+                confirmButtonColor: THEME.success,
+                timer: 2200,
+                showConfirmButton: false,
+            })
+
+            await cargarMatrices()
+        } catch (err) {
+            const msg =
+                err.response?.data?.detail ||
+                err.response?.data?.error ||
+                'No se pudo crear la matriz provincial.'
+
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: msg,
+                confirmButtonColor: THEME.danger,
+            })
+        } finally {
+            setCargando(false)
+        }
+    }
+
+    const editarEstadoMatriz = async (matriz) => {
+        if (!matriz?.id) return
+
+        const resultado = await Swal.fire({
+            icon: 'question',
+            title: 'Editar estado de matriz',
+            html: `
+            <div style="text-align:left;font-size:14px;color:#3F4254">
+                <div style="margin-bottom:12px">
+                    <strong>${matriz.nombre || 'Matriz seleccionada'}</strong>
+                </div>
+
+                <label style="font-weight:600;margin-bottom:6px;display:block">
+                    Estado
+                </label>
+
+                <select id="estado_matriz_select" class="swal2-input" style="margin:0;width:100%">
+                    <option value="BORRADOR" ${matriz.estado === 'BORRADOR' ? 'selected' : ''}>Borrador</option>
+                    <option value="PUBLICADA" ${matriz.estado === 'PUBLICADA' ? 'selected' : ''}>Publicada</option>
+                    <option value="CERRADA" ${matriz.estado === 'CERRADA' ? 'selected' : ''}>Cerrada</option>
+                </select>
+
+                <label style="display:flex;align-items:center;gap:8px;margin-top:16px;font-weight:600">
+                    <input 
+                        id="activo_matriz_check" 
+                        type="checkbox" 
+                        ${matriz.activo ? 'checked' : ''}
+                    />
+                    Matriz activa
+                </label>
+
+                <small style="display:block;margin-top:12px;color:#7E8299;line-height:1.5">
+                    Una matriz publicada puede ser usada por el sistema. 
+                    Una matriz cerrada bloquea cambios y sirve como histórico.
+                </small>
+            </div>
+        `,
+            showCancelButton: true,
+            confirmButtonColor: THEME.accent,
+            cancelButtonColor: THEME.muted,
+            confirmButtonText: 'Guardar cambios',
+            cancelButtonText: 'Cancelar',
+            preConfirm: () => {
+                const estado = document.getElementById('estado_matriz_select')?.value
+                const activo = document.getElementById('activo_matriz_check')?.checked
+
+                if (!estado) {
+                    Swal.showValidationMessage('Selecciona un estado válido.')
+                    return false
+                }
+
+                return {
+                    estado,
+                    activo,
+                }
+            },
+        })
+
+        if (!resultado.isConfirmed) return
+
+        try {
+            setCargando(true)
+
+            await axios.put(
+                `${API_URL}/catalogo/plaza/matrices/${matriz.id}`,
+                {
+                    estado: resultado.value.estado,
+                    activo: resultado.value.activo,
+                },
+                { headers }
+            )
+
+            await Swal.fire({
+                icon: 'success',
+                title: 'Matriz actualizada',
+                text: 'El estado de la matriz fue actualizado correctamente.',
+                confirmButtonColor: THEME.success,
+                timer: 2000,
+                showConfirmButton: false,
+            })
+
+            await cargarMatrices()
+        } catch (err) {
+            const msg =
+                err.response?.data?.detail ||
+                err.response?.data?.error ||
+                'No se pudo actualizar la matriz.'
+
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: msg,
+                confirmButtonColor: THEME.danger,
+            })
+        } finally {
+            setCargando(false)
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ABRIR MODAL
     // ═══════════════════════════════════════════════════════════════════════════
@@ -313,6 +892,312 @@ const CatalogoPanelPage = () => {
         if (tabActivo === 'especialidades') setFormEsp({ ...FORM_ESP_VACIO, _modalidadFiltro: filtroModalidadEsp || '' })
         if (tabActivo === 'caracteristicas') setFormCaract(FORM_CARACT_VACIO)
         setModalAbierto(true)
+    }
+
+    const abrirPanelNuevoItemMatriz = () => {
+        if (!matrizSeleccionada?.id) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Selecciona una matriz',
+                text: 'Primero selecciona una matriz para agregar combinaciones.',
+                confirmButtonColor: THEME.accent,
+            })
+            return
+        }
+
+        if (matrizSeleccionada.estado === 'CERRADA') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Matriz cerrada',
+                text: 'No puedes agregar combinaciones a una matriz cerrada.',
+                confirmButtonColor: THEME.warning,
+            })
+            return
+        }
+
+        if (!puedeEditarCombinaciones(matrizSeleccionada)) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Acción no permitida',
+                text: esAdmin
+                    ? 'Solo puedes modificar tu matriz provincial. La matriz global es solo referencia.'
+                    : 'No puedes modificar esta matriz.',
+                confirmButtonColor: THEME.warning,
+            })
+            return
+        }
+
+        setEditandoItemMatriz(false)
+        setFormItemMatriz(FORM_ITEM_MATRIZ_VACIO)
+        setMostrarPanelItemMatriz(true)
+    }
+
+    const cerrarPanelItemMatriz = () => {
+        setMostrarPanelItemMatriz(false)
+        setEditandoItemMatriz(false)
+        setFormItemMatriz(FORM_ITEM_MATRIZ_VACIO)
+    }
+
+    const abrirEditarItemMatriz = (item) => {
+        if (!item?.id) return
+
+        if (matrizSeleccionada?.estado === 'CERRADA') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Matriz cerrada',
+                text: 'No puedes editar combinaciones de una matriz cerrada.',
+                confirmButtonColor: THEME.warning,
+            })
+            return
+        }
+
+        setEditandoItemMatriz(true)
+
+        setFormItemMatriz({
+            id: item.id,
+            modalidad_id: item.modalidad_id || '',
+            nivel_id: item.nivel_id || '',
+            especialidad_id: item.especialidad_id || '',
+            caracteristica_id: item.caracteristica_id || '',
+            orden: item.orden || 1,
+            observaciones: item.observaciones || '',
+            activo: item.activo !== false,
+        })
+
+        setMostrarPanelItemMatriz(true)
+    }
+
+    const actualizarCampoItemMatriz = (campo, valor) => {
+        setFormItemMatriz((prev) => {
+            const nuevo = {
+                ...prev,
+                [campo]: valor,
+            }
+
+            if (campo === 'modalidad_id') {
+                nuevo.nivel_id = ''
+                nuevo.especialidad_id = ''
+                nuevo.caracteristica_id = ''
+            }
+
+            if (campo === 'nivel_id') {
+                nuevo.especialidad_id = ''
+                nuevo.caracteristica_id = ''
+            }
+
+            if (campo === 'especialidad_id') {
+                nuevo.caracteristica_id = ''
+            }
+
+            return nuevo
+        })
+    }
+
+    const validarItemMatriz = () => {
+        if (!matrizSeleccionada?.id) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Matriz requerida',
+                text: 'Selecciona una matriz antes de agregar una combinación.',
+                confirmButtonColor: THEME.accent,
+            })
+            return false
+        }
+
+        if (
+            !formItemMatriz.modalidad_id ||
+            !formItemMatriz.nivel_id ||
+            !formItemMatriz.especialidad_id ||
+            !formItemMatriz.caracteristica_id
+        ) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Combinación incompleta',
+                text: 'Selecciona modalidad, nivel, especialidad y característica.',
+                confirmButtonColor: THEME.accent,
+            })
+            return false
+        }
+
+        return true
+    }
+
+    const guardarItemMatriz = async () => {
+        if (!validarItemMatriz()) return
+
+        if (!puedeEditarCombinaciones(matrizSeleccionada)) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Acción no permitida',
+                text: esAdmin
+                    ? 'Solo puedes modificar tu matriz provincial. La matriz global es solo referencia.'
+                    : 'No puedes modificar esta matriz.',
+                confirmButtonColor: THEME.warning,
+            })
+            return
+        }
+
+        if (editandoItemMatriz && formItemMatriz.caracteristica_id === 'TODAS') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Edición no permitida',
+                text: 'La opción “Todas las características” solo se usa para crear nuevas combinaciones.',
+                confirmButtonColor: THEME.warning,
+            })
+            return
+        }
+
+        const listaCaracteristicasGuardar =
+            formItemMatriz.caracteristica_id === 'TODAS'
+                ? caracteristicasFormItem
+                : caracteristicasFormItem.filter(
+                    (c) => Number(c.id) === Number(formItemMatriz.caracteristica_id)
+                )
+
+        if (!listaCaracteristicasGuardar.length) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Sin características',
+                text: 'No se encontraron características activas para guardar.',
+                confirmButtonColor: THEME.warning,
+            })
+            return
+        }
+
+        try {
+            setGuardandoItemMatriz(true)
+
+            let creadas = 0
+            let omitidas = 0
+            let errores = 0
+
+            for (const caracteristica of listaCaracteristicasGuardar) {
+                const payload = {
+                    modalidad_id: Number(formItemMatriz.modalidad_id),
+                    nivel_id: Number(formItemMatriz.nivel_id),
+                    especialidad_id: Number(formItemMatriz.especialidad_id),
+                    caracteristica_id: Number(caracteristica.id),
+                    orden: Number(formItemMatriz.orden || 1),
+                    observaciones: formItemMatriz.observaciones || null,
+                    activo: formItemMatriz.activo !== false,
+                    es_agregado_local: matrizSeleccionada?.alcance !== 'GLOBAL',
+                }
+
+                try {
+                    if (editandoItemMatriz && formItemMatriz.id) {
+                        await axios.put(
+                            `${API_URL}/catalogo/plaza/items/${formItemMatriz.id}`,
+                            payload,
+                            { headers }
+                        )
+                    } else {
+                        await axios.post(
+                            `${API_URL}/catalogo/plaza/matrices/${matrizSeleccionada.id}/items`,
+                            payload,
+                            { headers }
+                        )
+                    }
+
+                    creadas += 1
+                } catch (err) {
+                    const detalle = String(err.response?.data?.detail || '').toLowerCase()
+
+                    if (
+                        detalle.includes('ya existe') ||
+                        detalle.includes('duplicado') ||
+                        detalle.includes('combinación ya existe')
+                    ) {
+                        omitidas += 1
+                    } else {
+                        errores += 1
+                    }
+                }
+            }
+
+            cerrarPanelItemMatriz()
+
+            await seleccionarMatriz(matrizSeleccionada)
+            await cargarMatrices()
+
+            await Swal.fire({
+                icon: errores > 0 ? 'warning' : 'success',
+                title: errores > 0 ? 'Proceso completado con observaciones' : 'Combinaciones guardadas',
+                html: `
+                <div style="text-align:left;font-size:14px;color:#3F4254">
+                    <strong>Guardadas:</strong> ${creadas}<br/>
+                    <strong>Omitidas por duplicado:</strong> ${omitidas}<br/>
+                    <strong>Errores:</strong> ${errores}
+                </div>
+            `,
+                confirmButtonColor: errores > 0 ? THEME.warning : THEME.success,
+            })
+        } catch (err) {
+            const msg =
+                err.response?.data?.detail ||
+                err.response?.data?.error ||
+                'No se pudo guardar la combinación.'
+
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: msg,
+                confirmButtonColor: THEME.danger,
+            })
+        } finally {
+            setGuardandoItemMatriz(false)
+        }
+    }
+
+    const cambiarEstadoItemMatriz = async (item) => {
+        const activar = item.activo !== true
+        const accionTexto = activar ? 'reactivar' : 'desactivar'
+
+        const resultado = await Swal.fire({
+            icon: activar ? 'question' : 'warning',
+            title: activar ? '¿Reactivar combinación?' : '¿Desactivar combinación?',
+            text: activar
+                ? 'La combinación volverá a estar disponible en esta matriz.'
+                : 'La combinación dejará de estar disponible para la selección de plaza.',
+            showCancelButton: true,
+            confirmButtonColor: activar ? THEME.success : THEME.danger,
+            cancelButtonColor: THEME.muted,
+            confirmButtonText: activar ? 'Sí, reactivar' : 'Sí, desactivar',
+            cancelButtonText: 'Cancelar',
+        })
+
+        if (!resultado.isConfirmed) return
+
+        try {
+            await axios.put(
+                `${API_URL}/catalogo/plaza/items/${item.id}`,
+                { activo: activar },
+                { headers }
+            )
+
+            await Swal.fire({
+                icon: 'success',
+                title: activar ? 'Combinación reactivada' : 'Combinación desactivada',
+                text: `La combinación fue ${accionTexto} correctamente.`,
+                confirmButtonColor: THEME.success,
+                timer: 1800,
+                showConfirmButton: false,
+            })
+
+            await seleccionarMatriz(matrizSeleccionada)
+            await cargarMatrices()
+        } catch (err) {
+            const msg =
+                err.response?.data?.detail ||
+                err.response?.data?.error ||
+                `No se pudo ${accionTexto} la combinación.`
+
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: msg,
+                confirmButtonColor: THEME.danger,
+            })
+        }
     }
 
     const abrirEditar = (item) => {
@@ -411,26 +1296,51 @@ const CatalogoPanelPage = () => {
 
             if (tabActivo === 'especialidades') {
                 if (!formEsp.nombre || !formEsp.codigo || !formEsp.nivel_id) {
-                    Swal.fire({ icon: 'warning', title: 'Campos requeridos', text: 'Nombre, código y nivel son obligatorios.', confirmButtonColor: THEME.accent })
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Campos requeridos',
+                        text: 'Nombre, código y nivel son obligatorios.',
+                        confirmButtonColor: THEME.accent,
+                    })
                     return
                 }
-                // ✅ FIX: excluir _modalidadFiltro del payload — es solo UI
+
                 const { _modalidadFiltro, ...payloadEsp } = formEsp
                 payload = payloadEsp
-                url = modoEditar
-                    ? `${API_URL}/catalogo/especialidades/${itemEditar.id}`
-                    : `${API_URL}/catalogo/especialidades`
+
+                if (esAdmin) {
+                    url = modoEditar
+                        ? `${API_URL}/catalogo/especialidades-gestion/${itemEditar.id}`
+                        : `${API_URL}/catalogo/especialidades-provinciales`
+                } else {
+                    url = modoEditar
+                        ? `${API_URL}/catalogo/especialidades-gestion/${itemEditar.id}`
+                        : `${API_URL}/catalogo/especialidades`
+                }
             }
 
             if (tabActivo === 'caracteristicas') {
                 if (!formCaract.nombre || !formCaract.codigo) {
-                    Swal.fire({ icon: 'warning', title: 'Campos requeridos', text: 'Nombre y código son obligatorios.', confirmButtonColor: THEME.accent })
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Campos requeridos',
+                        text: 'Nombre y código son obligatorios.',
+                        confirmButtonColor: THEME.accent,
+                    })
                     return
                 }
+
                 payload = formCaract
-                url = modoEditar
-                    ? `${API_URL}/catalogo/caracteristicas/${itemEditar.id}`
-                    : `${API_URL}/catalogo/caracteristicas`
+
+                if (esAdmin) {
+                    url = modoEditar
+                        ? `${API_URL}/catalogo/caracteristicas-gestion/${itemEditar.id}`
+                        : `${API_URL}/catalogo/caracteristicas-provinciales`
+                } else {
+                    url = modoEditar
+                        ? `${API_URL}/catalogo/caracteristicas-gestion/${itemEditar.id}`
+                        : `${API_URL}/catalogo/caracteristicas`
+                }
             }
 
             if (modoEditar) {
@@ -479,9 +1389,19 @@ const CatalogoPanelPage = () => {
             let url
             if (tabActivo === 'modalidades') url = `${API_URL}/catalogo/modalidades/${item.id}`
             if (tabActivo === 'niveles') url = `${API_URL}/catalogo/niveles/${item.id}`
-            if (tabActivo === 'especialidades') url = `${API_URL}/catalogo/especialidades/${item.id}`
-
-            await axios.delete(url, { headers })
+            if (tabActivo === 'especialidades') {
+                if (esAdmin) {
+                    await axios.put(
+                        `${API_URL}/catalogo/especialidades-gestion/${item.id}`,
+                        { activo: false },
+                        { headers }
+                    )
+                } else {
+                    await axios.delete(`${API_URL}/catalogo/especialidades/${item.id}`, { headers })
+                }
+            } else {
+                await axios.delete(url, { headers })
+            }
 
             Swal.fire({
                 icon: 'success', title: 'Desactivado',
@@ -525,6 +1445,190 @@ const CatalogoPanelPage = () => {
         ? niveles.filter((n) => n.activo && n.modalidad_id === Number(formEsp._modalidadFiltro))
         : niveles.filter((n) => n.activo)
 
+    const roleNivel = Number(
+        roleInfo?.nivel ||
+        auth?.user?.role_nivel ||
+        auth?.user?.role?.nivel ||
+        5
+    )
+
+    const esSuperAdmin = roleNivel === 1
+    const esAdmin = roleNivel === 2
+
+    const esMatrizGlobal = (matriz) => matriz?.alcance === 'GLOBAL'
+
+    const esMatrizProvincialPropia = (matriz) => {
+        return (
+            matriz?.alcance === 'PROVINCIA' &&
+            Number(matriz?.provincia_id) === Number(provinciaUsuarioId)
+        )
+    }
+
+    const puedeInicializarGlobal = esSuperAdmin
+
+    const puedeEditarMatriz = (matriz) => {
+        if (!matriz) return false
+        if (esSuperAdmin) return true
+        if (esAdmin) return esMatrizProvincialPropia(matriz)
+        return false
+    }
+
+    const puedeEditarCombinaciones = (matriz) => {
+        if (!matriz) return false
+        if (matriz.estado === 'CERRADA') return false
+        if (esSuperAdmin) return true
+        if (esAdmin) return esMatrizProvincialPropia(matriz)
+        return false
+    }
+
+    const puedeEditarCatalogoBase = (tipo, item = null) => {
+        if (esSuperAdmin) return true
+
+        if (esAdmin) {
+            if (tipo === 'modalidades') return false
+            if (tipo === 'niveles') return false
+
+            if (tipo === 'especialidades' || tipo === 'caracteristicas') {
+                if (!item) return true
+
+                return (
+                    item.alcance === 'PROVINCIA' &&
+                    Number(item.provincia_id) === Number(provinciaUsuarioId)
+                )
+            }
+        }
+
+        return false
+    }
+
+    const matrizGlobalPublicada = matrices.find(
+        (m) => m.alcance === 'GLOBAL' && m.estado === 'PUBLICADA' && m.activo
+    )
+
+    const matrizProvincialUsuario = matrices.find(
+        (m) =>
+            m.alcance === 'PROVINCIA' &&
+            Number(m.provincia_id) === Number(provinciaUsuarioId) &&
+            m.activo
+    )
+
+    const getNombreEspecialidad = (id) => {
+        return especialidades.find((e) => Number(e.id) === Number(id))?.nombre || '—'
+    }
+
+    const totalMatricesGlobales = useMemo(
+        () => matrices.filter((m) => m.alcance === 'GLOBAL').length,
+        [matrices]
+    )
+
+    const totalMatricesProvinciales = useMemo(
+        () => matrices.filter((m) => m.alcance === 'PROVINCIA').length,
+        [matrices]
+    )
+
+    const totalMatricesPublicadas = useMemo(
+        () => matrices.filter((m) => m.estado === 'PUBLICADA').length,
+        [matrices]
+    )
+
+    const totalMatricesBorrador = useMemo(
+        () => matrices.filter((m) => m.estado === 'BORRADOR').length,
+        [matrices]
+    )
+
+    const nivelesFiltroMatriz = filtrosMatriz.modalidad_id
+        ? niveles.filter((n) => Number(n.modalidad_id) === Number(filtrosMatriz.modalidad_id))
+        : []
+
+    const especialidadesFiltroMatriz = filtrosMatriz.nivel_id
+        ? especialidades.filter((e) => Number(e.nivel_id) === Number(filtrosMatriz.nivel_id))
+        : []
+
+    const itemsMatrizFiltrados = useMemo(() => {
+        return itemsMatriz.filter((item) => {
+            if (filtrosMatriz.modalidad_id && Number(item.modalidad_id) !== Number(filtrosMatriz.modalidad_id)) {
+                return false
+            }
+
+            if (filtrosMatriz.nivel_id && Number(item.nivel_id) !== Number(filtrosMatriz.nivel_id)) {
+                return false
+            }
+
+            if (filtrosMatriz.especialidad_id && Number(item.especialidad_id) !== Number(filtrosMatriz.especialidad_id)) {
+                return false
+            }
+
+            return true
+        })
+    }, [itemsMatriz, filtrosMatriz])
+
+    const modalidadFormItem = modalidades.find(
+        (m) => Number(m.id) === Number(formItemMatriz.modalidad_id)
+    )
+
+    const nivelesFormItem = modalidadFormItem
+        ? niveles.filter((n) => n.activo && Number(n.modalidad_id) === Number(modalidadFormItem.id))
+        : []
+
+    const nivelFormItem = nivelesFormItem.find(
+        (n) => Number(n.id) === Number(formItemMatriz.nivel_id)
+    )
+
+    const especialidadesFormItem = nivelFormItem
+        ? especialidades.filter((e) => e.activo && Number(e.nivel_id) === Number(nivelFormItem.id))
+        : []
+
+    const caracteristicasFormItem = caracteristicas.filter((c) => c.activo)
+
+    const cambiarVistaCatalogoBase = (tipo) => {
+        setVistaCatalogoBase(tipo)
+        setTabActivo(tipo)
+    }
+
+    const obtenerListaCatalogoBase = () => {
+        if (vistaCatalogoBase === 'modalidades') return modalidades
+        if (vistaCatalogoBase === 'niveles') return niveles
+        if (vistaCatalogoBase === 'especialidades') return especialidades
+        if (vistaCatalogoBase === 'caracteristicas') return caracteristicas
+        return []
+    }
+
+    const listaCatalogoBase = obtenerListaCatalogoBase()
+
+    const obtenerRelacionCatalogoBase = (item) => {
+        if (vistaCatalogoBase === 'modalidades') {
+            return item.descripcion || 'Catálogo nacional'
+        }
+
+        if (vistaCatalogoBase === 'niveles') {
+            return getNombreModalidad(item.modalidad_id)
+        }
+
+        if (vistaCatalogoBase === 'especialidades') {
+            return getNombreNivel(item.nivel_id)
+        }
+
+        if (vistaCatalogoBase === 'caracteristicas') {
+            const flags = []
+
+            if (item.es_bilingue) flags.push('Bilingüe')
+            if (item.es_convenio) flags.push('Convenio')
+            if (item.visible_docente) flags.push('Visible docente')
+
+            return flags.length > 0 ? flags.join(' · ') : 'General'
+        }
+
+        return '—'
+    }
+
+    const obtenerTituloCatalogoBase = () => {
+        if (vistaCatalogoBase === 'modalidades') return 'Modalidades'
+        if (vistaCatalogoBase === 'niveles') return 'Niveles'
+        if (vistaCatalogoBase === 'especialidades') return 'Especialidades'
+        if (vistaCatalogoBase === 'caracteristicas') return 'Características'
+        return 'Catálogo base'
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // RENDER
     // ═══════════════════════════════════════════════════════════════════════════
@@ -532,450 +1636,938 @@ const CatalogoPanelPage = () => {
         <div className="container-fluid px-0">
 
             {/* ── HEADER ── */}
-            <div className="card card-custom mb-7" style={{ background: HEADER_GRADIENT, border: 'none' }}>
+            <div
+                className="card card-custom mb-7"
+                style={{ background: HEADER_GRADIENT, border: 'none', borderRadius: 12 }}
+            >
                 <div className="card-body py-8 px-8">
-                    <div className="d-flex align-items-center justify-content-between flex-wrap">
-                        <div className="d-flex align-items-center">
-                            <div
-                                className="d-flex align-items-center justify-content-center rounded mr-5"
-                                style={{ width: 56, height: 56, backgroundColor: 'rgba(255,255,255,0.15)', flexShrink: 0 }}
-                            >
-                                <i className="fas fa-cogs text-white" style={{ fontSize: 24 }} />
-                            </div>
-                            <div>
-                                <h2 className="text-white font-weight-bolder mb-1">Panel de Catálogo</h2>
-                                <p className="text-white mb-0" style={{ opacity: 0.8, fontSize: 14 }}>
-                                    Gestiona modalidades, niveles, especialidades y características del sistema
-                                </p>
-                            </div>
+                    <div className="d-flex align-items-center justify-content-between flex-wrap" style={{ gap: 12 }}>
+                        <div>
+                            <h2 className="text-white font-weight-bolder mb-1">
+                                <i className="fas fa-sitemap mr-3" style={{ opacity: 0.85 }} />
+                                Catálogo de Plaza
+                            </h2>
+
+                            <p className="text-white mb-0" style={{ opacity: 0.75, fontSize: 14 }}>
+                                Gestiona matrices, combinaciones válidas y catálogo base para la selección de plaza docente.
+                            </p>
                         </div>
-                        <button
-                            className="btn font-weight-bolder mt-3 mt-md-0"
-                            style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#fff', border: 'none' }}
-                            onClick={cargarTodo}
-                            disabled={cargando}
-                        >
-                            <i className={`fas fa-sync-alt mr-2 ${cargando ? 'fa-spin' : ''}`} />
-                            Actualizar
-                        </button>
-                    </div>
-                </div>
-            </div>
 
-            {/* ── TARJETAS DE RESUMEN ── */}
-            <div className="row mb-7">
-                {[
-                    { label: 'Modalidades', count: modalidades.filter((m) => m.activo).length, icon: 'fa-graduation-cap', color: THEME.accent },
-                    { label: 'Niveles', count: niveles.filter((n) => n.activo).length, icon: 'fa-layer-group', color: THEME.secondary },
-                    { label: 'Especialidades', count: especialidades.filter((e) => e.activo).length, icon: 'fa-folder', color: THEME.success },
-                    { label: 'Características', count: caracteristicas.filter((c) => c.activo).length, icon: 'fa-tags', color: THEME.info },
-                ].map((stat) => (
-                    <div key={stat.label} className="col-6 col-md-3 mb-4 mb-md-0">
-                        <div className="card card-custom border-0" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-                            <div className="card-body p-5 d-flex align-items-center">
-                                <div
-                                    className="d-flex align-items-center justify-content-center rounded mr-4"
-                                    style={{ width: 48, height: 48, backgroundColor: `${stat.color}15`, flexShrink: 0 }}
-                                >
-                                    <i className={`fas ${stat.icon}`} style={{ color: stat.color, fontSize: 20 }} />
-                                </div>
-                                <div>
-                                    <div className="font-weight-bolder text-dark" style={{ fontSize: 24, lineHeight: 1 }}>
-                                        {stat.count}
-                                    </div>
-                                    <div className="text-muted font-size-sm">{stat.label}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
+                        <div className="d-flex flex-wrap align-items-center" style={{ gap: 8 }}>
+                            <span className="label label-inline label-lg font-weight-bold" style={{ background: '#EEF6FF', color: '#3699FF' }}>
+                                {totalMatricesGlobales} globales
+                            </span>
 
-            {/* ── CARD PRINCIPAL ── */}
-            <div className="card card-custom">
-                <div className="card-body px-8 py-7">
+                            <span className="label label-inline label-lg font-weight-bold" style={{ background: '#EEE5FF', color: '#8950FC' }}>
+                                {totalMatricesProvinciales} provinciales
+                            </span>
 
-                    {/* TABS */}
-                    <div className="d-flex align-items-center justify-content-between flex-wrap mb-7">
-                        <div className="d-flex" style={{ gap: 4 }}>
-                            {TABS.map((tab) => (
+                            <span className="label label-inline label-lg font-weight-bold" style={{ background: '#E8FFF3', color: '#1BC5BD' }}>
+                                {totalMatricesPublicadas} publicadas
+                            </span>
+
+                            <span className="label label-inline label-lg font-weight-bold" style={{ background: '#FFF4DE', color: '#FFA800' }}>
+                                {totalMatricesBorrador} borradores
+                            </span>
+
+                            {esSuperAdmin && (
                                 <button
-                                    key={tab.id}
-                                    onClick={() => setTabActivo(tab.id)}
-                                    className="btn font-weight-bold font-size-sm"
-                                    style={{
-                                        backgroundColor: tabActivo === tab.id ? THEME.accent : 'transparent',
-                                        color: tabActivo === tab.id ? '#fff' : THEME.muted,
-                                        border: `1px solid ${tabActivo === tab.id ? THEME.accent : '#EBEDF3'}`,
-                                        borderRadius: 8, padding: '8px 16px', transition: 'all 0.2s',
-                                    }}
+                                    type="button"
+                                    className="btn btn-light-primary font-weight-bold ml-0 ml-md-3"
+                                    onClick={inicializarMatrizGlobal}
+                                    disabled={cargando}
                                 >
-                                    <i className={`fas ${tab.icon} mr-2`} style={{ fontSize: 12 }} />
-                                    {tab.label}
+                                    <i className="fas fa-magic mr-2" />
+                                    Inicializar global
                                 </button>
-                            ))}
+                            )}
+
+                            {esAdmin && (
+                                <button
+                                    type="button"
+                                    className="btn btn-light-success font-weight-bold ml-0 ml-md-3"
+                                    onClick={crearMatrizProvincialDesdeGlobal}
+                                    disabled={cargando || !matrizGlobalPublicada}
+                                >
+                                    <i className="fas fa-copy mr-2" />
+                                    Crear matriz provincial
+                                </button>
+                            )}
                         </div>
-                        <button
-                            className="btn btn-primary font-weight-bolder mt-3 mt-md-0"
-                            onClick={abrirCrear}
-                        >
-                            <i className="fas fa-plus mr-2" />
-                            Nuevo {TABS.find((t) => t.id === tabActivo)?.label.slice(0, -1)}
-                        </button>
                     </div>
-
-                    {/* ══════════════════════════════════════════════════════
-                        TAB: MODALIDADES
-                    ══════════════════════════════════════════════════════ */}
-                    {tabActivo === 'modalidades' && (
-                        <div>
-                            {cargando ? <SpinnerCarga texto="Cargando modalidades..." /> : (
-                                modalidades.length === 0
-                                    ? <EstadoVacio mensaje="Sin modalidades" submensaje="Crea la primera modalidad educativa." onAccion={abrirCrear} textoAccion="Crear modalidad" />
-                                    : (
-                                        <div className="table-responsive">
-                                            <table className="table table-hover">
-                                                <thead>
-                                                    <tr style={{ backgroundColor: '#F3F6F9' }}>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 pl-4">Nombre</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0">Código</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0">Descripción</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Orden</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Estado</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Acciones</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {modalidades.map((m) => (
-                                                        <tr key={m.id}>
-                                                            <td className="pl-4 font-weight-bolder text-dark align-middle">{m.nombre}</td>
-                                                            <td className="align-middle">
-                                                                <Badge label={m.codigo} bg={THEME.accentBg} color={THEME.accent} />
-                                                            </td>
-                                                            <td className="text-muted font-size-sm align-middle" style={{ maxWidth: 200 }}>
-                                                                {m.descripcion || '—'}
-                                                            </td>
-                                                            <td className="text-center align-middle text-muted font-size-sm">{m.orden}</td>
-                                                            <td className="text-center align-middle">
-                                                                {m.activo
-                                                                    ? <Badge label="Activo" bg={THEME.successBg} color={THEME.success} />
-                                                                    : <Badge label="Inactivo" bg="#F3F6F9" color={THEME.muted} />
-                                                                }
-                                                            </td>
-                                                            <td className="text-center align-middle">
-                                                                <button className="btn btn-icon btn-sm btn-light-primary mr-2" onClick={() => abrirEditar(m)} title="Editar">
-                                                                    <i className="fas fa-pencil-alt" style={{ fontSize: 12 }} />
-                                                                </button>
-                                                                {m.activo && (
-                                                                    <button className="btn btn-icon btn-sm btn-light-danger" onClick={() => eliminar(m)} title="Desactivar">
-                                                                        <i className="fas fa-ban" style={{ fontSize: 12 }} />
-                                                                    </button>
-                                                                )}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )
-                            )}
-                        </div>
-                    )}
-
-                    {/* ══════════════════════════════════════════════════════
-                        TAB: NIVELES
-                    ══════════════════════════════════════════════════════ */}
-                    {tabActivo === 'niveles' && (
-                        <div>
-                            <div className="d-flex align-items-center mb-5" style={{ gap: 12 }}>
-                                <label className="font-weight-bold text-dark font-size-sm mb-0 flex-shrink-0">
-                                    Filtrar por modalidad:
-                                </label>
-                                <select
-                                    className="form-control"
-                                    style={{ maxWidth: 280 }}
-                                    value={filtroModalidadNivel}
-                                    onChange={(e) => {
-                                        const val = e.target.value
-                                        setFiltroModalidadNivel(val)
-                                    }}
-                                >
-                                    <option value="">Todas las modalidades</option>
-                                    {modalidades.filter((m) => m.activo).map((m) => (
-                                        <option key={m.id} value={m.id}>{m.nombre}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {cargando ? <SpinnerCarga texto="Cargando niveles..." /> : (
-                                nivelesFiltrados.length === 0
-                                    ? <EstadoVacio mensaje="Sin niveles" submensaje="Crea el primer nivel educativo." onAccion={abrirCrear} textoAccion="Crear nivel" />
-                                    : (
-                                        <div className="table-responsive">
-                                            <table className="table table-hover">
-                                                <thead>
-                                                    <tr style={{ backgroundColor: '#F3F6F9' }}>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 pl-4">Nombre</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0">Código</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0">Modalidad</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Orden</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Estado</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Acciones</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {nivelesFiltrados.map((n) => (
-                                                        <tr key={n.id}>
-                                                            <td className="pl-4 font-weight-bolder text-dark align-middle">{n.nombre}</td>
-                                                            <td className="align-middle">
-                                                                <Badge label={n.codigo} bg={`${THEME.secondary}15`} color={THEME.secondary} />
-                                                            </td>
-                                                            <td className="align-middle">
-                                                                <Badge label={getNombreModalidad(n.modalidad_id)} bg={THEME.accentBg} color={THEME.accent} />
-                                                            </td>
-                                                            <td className="text-center align-middle text-muted font-size-sm">{n.orden}</td>
-                                                            <td className="text-center align-middle">
-                                                                {n.activo
-                                                                    ? <Badge label="Activo" bg={THEME.successBg} color={THEME.success} />
-                                                                    : <Badge label="Inactivo" bg="#F3F6F9" color={THEME.muted} />
-                                                                }
-                                                            </td>
-                                                            <td className="text-center align-middle">
-                                                                <button className="btn btn-icon btn-sm btn-light-primary mr-2" onClick={() => abrirEditar(n)} title="Editar">
-                                                                    <i className="fas fa-pencil-alt" style={{ fontSize: 12 }} />
-                                                                </button>
-                                                                {n.activo && (
-                                                                    <button className="btn btn-icon btn-sm btn-light-danger" onClick={() => eliminar(n)} title="Desactivar">
-                                                                        <i className="fas fa-ban" style={{ fontSize: 12 }} />
-                                                                    </button>
-                                                                )}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )
-                            )}
-                        </div>
-                    )}
-
-                    {/* ══════════════════════════════════════════════════════
-                        TAB: ESPECIALIDADES
-                    ══════════════════════════════════════════════════════ */}
-                    {tabActivo === 'especialidades' && (
-                        <div>
-                            <div className="d-flex align-items-center flex-wrap mb-5" style={{ gap: 12 }}>
-                                <label className="font-weight-bold text-dark font-size-sm mb-0 flex-shrink-0">Filtrar:</label>
-                                <select
-                                    className="form-control"
-                                    style={{ maxWidth: 220 }}
-                                    value={filtroModalidadEsp}
-                                    onChange={(e) => {
-                                        const val = e.target.value
-                                        setFiltroModalidadEsp(val)
-                                        setFiltroNivelEsp('')
-                                    }}
-                                >
-                                    <option value="">Todas las modalidades</option>
-                                    {modalidades.filter((m) => m.activo).map((m) => (
-                                        <option key={m.id} value={m.id}>{m.nombre}</option>
-                                    ))}
-                                </select>
-                                <select
-                                    className="form-control"
-                                    style={{ maxWidth: 220 }}
-                                    value={filtroNivelEsp}
-                                    onChange={(e) => {
-                                        const val = e.target.value
-                                        setFiltroNivelEsp(val)
-                                    }}
-                                >
-                                    <option value="">Todos los niveles</option>
-                                    {(filtroModalidadEsp
-                                        ? niveles.filter((n) => n.modalidad_id === Number(filtroModalidadEsp) && n.activo)
-                                        : niveles.filter((n) => n.activo)
-                                    ).map((n) => (
-                                        <option key={n.id} value={n.id}>{n.nombre}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {cargando ? <SpinnerCarga texto="Cargando especialidades..." /> : (
-                                especialidadesFiltradas.length === 0
-                                    ? <EstadoVacio mensaje="Sin especialidades" submensaje="Crea la primera especialidad." onAccion={abrirCrear} textoAccion="Crear especialidad" />
-                                    : (
-                                        <div className="table-responsive">
-                                            <table className="table table-hover">
-                                                <thead>
-                                                    <tr style={{ backgroundColor: '#F3F6F9' }}>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 pl-4">Nombre</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0">Código</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0">Nivel</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Color</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Anexo 6</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Estado</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Acciones</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {especialidadesFiltradas.map((e) => (
-                                                        <tr key={e.id}>
-                                                            <td className="pl-4 font-weight-bolder text-dark align-middle">{e.nombre}</td>
-                                                            <td className="align-middle">
-                                                                <Badge label={e.codigo} bg="#F3F6F9" color="#3F4254" />
-                                                            </td>
-                                                            <td className="align-middle">
-                                                                <Badge label={getNombreNivel(e.nivel_id)} bg={`${THEME.secondary}15`} color={THEME.secondary} />
-                                                            </td>
-                                                            <td className="text-center align-middle">
-                                                                <div className="d-flex align-items-center justify-content-center" style={{ gap: 6 }}>
-                                                                    <div style={{
-                                                                        width: 20, height: 20, borderRadius: 4,
-                                                                        backgroundColor: e.color_folder_hex || '#ccc',
-                                                                        border: '1px solid rgba(0,0,0,0.1)', flexShrink: 0,
-                                                                    }} />
-                                                                    <span className="text-muted font-size-xs">{e.color_folder || '—'}</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="text-center align-middle text-muted font-size-sm">
-                                                                {e.anexo6_numero ? `Ítem ${e.anexo6_numero}` : '—'}
-                                                            </td>
-                                                            <td className="text-center align-middle">
-                                                                {e.activo
-                                                                    ? <Badge label="Activo" bg={THEME.successBg} color={THEME.success} />
-                                                                    : <Badge label="Inactivo" bg="#F3F6F9" color={THEME.muted} />
-                                                                }
-                                                            </td>
-                                                            <td className="text-center align-middle">
-                                                                <button className="btn btn-icon btn-sm btn-light-primary mr-2" onClick={() => abrirEditar(e)} title="Editar">
-                                                                    <i className="fas fa-pencil-alt" style={{ fontSize: 12 }} />
-                                                                </button>
-                                                                {e.activo && (
-                                                                    <button className="btn btn-icon btn-sm btn-light-danger" onClick={() => eliminar(e)} title="Desactivar">
-                                                                        <i className="fas fa-ban" style={{ fontSize: 12 }} />
-                                                                    </button>
-                                                                )}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )
-                            )}
-                        </div>
-                    )}
-
-                    {/* ══════════════════════════════════════════════════════
-                        TAB: CARACTERÍSTICAS
-                    ══════════════════════════════════════════════════════ */}
-                    {tabActivo === 'caracteristicas' && (
-                        <div>
-                            {cargando ? <SpinnerCarga texto="Cargando características..." /> : (
-                                caracteristicas.length === 0
-                                    ? <EstadoVacio mensaje="Sin características" submensaje="Crea la primera característica." onAccion={abrirCrear} textoAccion="Crear característica" />
-                                    : (
-                                        <div className="table-responsive">
-                                            <table className="table table-hover">
-                                                <thead>
-                                                    <tr style={{ backgroundColor: '#F3F6F9' }}>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 pl-4">Nombre</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0">Código</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0">Descripción</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Bilingüe</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Convenio</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Visible Docente</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Estado</th>
-                                                        <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Acciones</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {caracteristicas.map((c) => (
-                                                        <tr key={c.id}>
-                                                            <td className="pl-4 font-weight-bolder text-dark align-middle">{c.nombre}</td>
-                                                            <td className="align-middle">
-                                                                <Badge label={c.codigo} bg={THEME.infoBg} color={THEME.info} />
-                                                            </td>
-                                                            <td className="text-muted font-size-sm align-middle" style={{ maxWidth: 200 }}>
-                                                                {c.descripcion || '—'}
-                                                            </td>
-                                                            <td className="text-center align-middle">
-                                                                {c.es_bilingue
-                                                                    ? <Badge label="Sí" bg={THEME.infoBg} color={THEME.info} />
-                                                                    : <Badge label="No" bg="#F3F6F9" color={THEME.muted} />
-                                                                }
-                                                            </td>
-                                                            <td className="text-center align-middle">
-                                                                {c.es_convenio
-                                                                    ? <Badge label="Sí" bg={THEME.warningBg} color={THEME.warning} />
-                                                                    : <Badge label="No" bg="#F3F6F9" color={THEME.muted} />
-                                                                }
-                                                            </td>
-                                                            {/* ── Toggle Visible Docente ── */}
-                                                            <td className="text-center align-middle">
-                                                                <div
-                                                                    className="d-flex align-items-center justify-content-center"
-                                                                    style={{ gap: 6, cursor: 'pointer' }}
-                                                                    title={c.visible_docente ? 'Visible para docente — clic para ocultar' : 'Oculto para docente — clic para mostrar'}
-                                                                    onClick={async () => {
-                                                                        try {
-                                                                            await axios.put(
-                                                                                `${API_URL}/catalogo/caracteristicas/${c.id}`,
-                                                                                { visible_docente: !c.visible_docente },
-                                                                                { headers }
-                                                                            )
-                                                                            cargarCaracteristicas()
-                                                                        } catch (err) {
-                                                                            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo actualizar.', confirmButtonColor: THEME.accent })
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    <div style={{
-                                                                        width: 36, height: 20, borderRadius: 10,
-                                                                        background: c.visible_docente ? THEME.success : '#EBEDF3',
-                                                                        position: 'relative', transition: 'background 0.2s',
-                                                                        flexShrink: 0,
-                                                                    }}>
-                                                                        <div style={{
-                                                                            width: 14, height: 14, borderRadius: '50%',
-                                                                            background: '#fff',
-                                                                            position: 'absolute',
-                                                                            top: 3,
-                                                                            left: c.visible_docente ? 19 : 3,
-                                                                            transition: 'left 0.2s',
-                                                                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                                                                        }} />
-                                                                    </div>
-                                                                    <span className="font-size-xs font-weight-bold"
-                                                                        style={{ color: c.visible_docente ? THEME.success : THEME.muted }}>
-                                                                        {c.visible_docente ? 'Visible' : 'Oculto'}
-                                                                    </span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="text-center align-middle">
-                                                                {c.activo
-                                                                    ? <Badge label="Activo" bg={THEME.successBg} color={THEME.success} />
-                                                                    : <Badge label="Inactivo" bg="#F3F6F9" color={THEME.muted} />
-                                                                }
-                                                            </td>
-                                                            <td className="text-center align-middle">
-                                                                <button className="btn btn-icon btn-sm btn-light-primary" onClick={() => abrirEditar(c)} title="Editar">
-                                                                    <i className="fas fa-pencil-alt" style={{ fontSize: 12 }} />
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )
-                            )}
-                        </div>
-                    )}
-
                 </div>
             </div>
+
+            {cargando && (
+                <div className="text-center py-10">
+                    <div className="spinner spinner-primary spinner-lg mb-4" />
+                    <div className="text-muted font-weight-bold">Cargando catálogo de plaza...</div>
+                </div>
+            )}
+
+            {esAdmin && (
+                <div
+                    className="alert alert-custom alert-light-primary mb-7"
+                    style={{ borderLeft: '4px solid #3699FF' }}
+                >
+                    <div className="alert-icon">
+                        <i className="fas fa-info-circle text-primary" />
+                    </div>
+                    <div className="alert-text">
+                        <strong>Vista de administrador provincial:</strong> puedes trabajar sobre tu matriz provincial.
+                        La matriz global funciona como referencia base. Modalidades y niveles son de lectura porque corresponden
+                        a la estructura nacional.
+                    </div>
+                </div>
+            )}
+
+            {!cargando && (
+                <>
+                    {/* ── MATRICES REGISTRADAS ── */}
+                    <div className="card card-custom mb-7">
+                        <div className="card-header">
+                            <div className="card-title">
+                                <span className="card-icon">
+                                    <i className="fas fa-table text-primary" />
+                                </span>
+                                <h3 className="card-label font-weight-bolder">
+                                    Matrices registradas
+                                </h3>
+                            </div>
+
+                            <div className="card-toolbar">
+                                <div className="d-flex align-items-center" style={{ gap: 10 }}>
+                                    <input
+                                        type="number"
+                                        className="form-control form-control-sm"
+                                        style={{ width: 110 }}
+                                        value={anioMatriz}
+                                        onChange={(e) => setAnioMatriz(Number(e.target.value))}
+                                    />
+
+                                    <button
+                                        type="button"
+                                        className="btn btn-sm btn-light-primary font-weight-bold"
+                                        onClick={cargarMatrices}
+                                        disabled={cargando}
+                                    >
+                                        <i className="fas fa-search mr-1" />
+                                        Buscar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="card-body p-0">
+                            {matrices.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <i className="fas fa-folder-open text-muted mb-4" style={{ fontSize: 38 }} />
+                                    <div className="font-weight-bolder text-dark mb-1">
+                                        Aún no hay matrices registradas
+                                    </div>
+                                    <div className="text-muted font-size-sm mb-4">
+                                        Inicializa la matriz global para empezar a controlar combinaciones válidas.
+                                    </div>
+
+                                    {esSuperAdmin ? (
+                                        <button
+                                            type="button"
+                                            className="btn btn-primary font-weight-bold"
+                                            onClick={inicializarMatrizGlobal}
+                                        >
+                                            <i className="fas fa-magic mr-2" />
+                                            Inicializar matriz global
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            className="btn btn-success font-weight-bold"
+                                            onClick={crearMatrizProvincialDesdeGlobal}
+                                            disabled={!matrizGlobalPublicada}
+                                        >
+                                            <i className="fas fa-copy mr-2" />
+                                            Crear matriz provincial
+                                        </button>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="table-responsive">
+                                    <table className="table table-head-custom table-vertical-center mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Matriz</th>
+                                                <th>Año</th>
+                                                <th>Alcance</th>
+                                                <th>Estado</th>
+                                                <th>Items</th>
+                                                <th>Activo</th>
+                                                <th className="text-right">Acción</th>
+                                            </tr>
+                                        </thead>
+
+                                        <tbody>
+                                            {matrices.map((matriz) => {
+                                                const seleccionada = Number(matrizSeleccionada?.id) === Number(matriz.id)
+
+                                                return (
+                                                    <tr
+                                                        key={matriz.id}
+                                                        style={{ background: seleccionada ? '#EEF6FF' : 'transparent' }}
+                                                    >
+                                                        <td>
+                                                            <div className="font-weight-bolder text-dark">
+                                                                {matriz.nombre}
+                                                            </div>
+                                                            <div className="text-muted font-size-xs">
+                                                                ID: {matriz.id}
+                                                                {matriz.provincia_nombre ? ` · Provincia: ${matriz.provincia_nombre}` : ''}
+                                                                {matriz.convocatoria_nombre ? ` · Convocatoria: ${matriz.convocatoria_nombre}` : ''}
+                                                            </div>
+                                                        </td>
+
+                                                        <td>{matriz.anio || '—'}</td>
+
+                                                        <td>
+                                                            <AlcanceMatrizBadge alcance={matriz.alcance} />
+                                                        </td>
+
+                                                        <td>
+                                                            <EstadoMatrizBadge estado={matriz.estado} />
+                                                        </td>
+
+                                                        <td>
+                                                            <span className="font-weight-bolder text-dark">
+                                                                {matriz.total_items || 0}
+                                                            </span>
+                                                        </td>
+
+                                                        <td>
+                                                            {matriz.activo ? (
+                                                                <Badge label="Activo" bg={THEME.successBg} color={THEME.success} />
+                                                            ) : (
+                                                                <Badge label="Inactivo" bg="#F3F6F9" color={THEME.muted} />
+                                                            )}
+                                                        </td>
+
+                                                        <td className="text-right">
+                                                            <button
+                                                                type="button"
+                                                                className={`btn btn-sm font-weight-bold mr-2 ${seleccionada ? 'btn-primary' : 'btn-light-primary'}`}
+                                                                onClick={() => seleccionarMatriz(matriz)}
+                                                            >
+                                                                <i className="fas fa-eye mr-1" />
+                                                                Ver combinaciones
+                                                            </button>
+
+                                                            {puedeEditarMatriz(matriz) && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn btn-sm btn-light-warning font-weight-bold mr-2"
+                                                                    onClick={() => editarEstadoMatriz(matriz)}
+                                                                    title="Editar estado de matriz"
+                                                                >
+                                                                    <i className="fas fa-sliders-h mr-1" />
+                                                                    Estado
+                                                                </button>
+                                                            )}
+
+                                                            {esSuperAdmin && matriz.alcance === 'GLOBAL' && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn btn-sm btn-light-success font-weight-bold"
+                                                                    onClick={() => clonarMatrizAProvincia(matriz)}
+                                                                >
+                                                                    <i className="fas fa-copy mr-1" />
+                                                                    Clonar
+                                                                </button>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ── DETALLE DE MATRIZ ── */}
+                    <div className="card card-custom mb-7">
+                        <div className="card-header">
+                            <div className="card-title">
+                                <span className="card-icon">
+                                    <i className="fas fa-project-diagram text-primary" />
+                                </span>
+                                <h3 className="card-label font-weight-bolder">
+                                    Combinaciones de la matriz
+                                </h3>
+                            </div>
+
+                            <div className="card-toolbar">
+                                <button
+                                    type="button"
+                                    className="btn btn-primary font-weight-bold"
+                                    onClick={abrirPanelNuevoItemMatriz}
+                                    disabled={!puedeEditarCombinaciones(matrizSeleccionada)}
+                                >
+                                    <i className="fas fa-plus mr-2" />
+                                    Agregar combinación
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="card-body p-6">
+                            {!matrizSeleccionada ? (
+                                <div className="text-center py-10">
+                                    <i className="fas fa-sitemap text-muted mb-4" style={{ fontSize: 36 }} />
+                                    <div className="font-weight-bolder text-dark mb-1">
+                                        Selecciona una matriz
+                                    </div>
+                                    <div className="text-muted font-size-sm">
+                                        Al seleccionar una matriz podrás ver sus combinaciones válidas.
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <div
+                                        className="rounded p-4 mb-6"
+                                        style={{ background: '#F8F9FA', border: '1px solid #EBEDF3' }}
+                                    >
+                                        <div className="d-flex align-items-center justify-content-between flex-wrap" style={{ gap: 12 }}>
+                                            <div>
+                                                <div className="font-weight-bolder text-dark">
+                                                    {matrizSeleccionada.nombre}
+                                                </div>
+                                                <div className="text-muted font-size-sm">
+                                                    Año {matrizSeleccionada.anio || '—'} · {matrizSeleccionada.observaciones || 'Sin observaciones'}
+                                                </div>
+                                            </div>
+
+                                            <div className="d-flex flex-wrap" style={{ gap: 8 }}>
+                                                <AlcanceMatrizBadge alcance={matrizSeleccionada.alcance} />
+                                                <EstadoMatrizBadge estado={matrizSeleccionada.estado} />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {mostrarPanelItemMatriz && (
+                                        <div
+                                            className="rounded p-5 mb-6"
+                                            style={{ background: '#EEF6FF', border: '1px solid #B8DAFF' }}
+                                        >
+                                            <div className="d-flex align-items-center justify-content-between mb-5">
+                                                <div>
+                                                    <h5 className="font-weight-bolder text-dark mb-1">
+                                                        {editandoItemMatriz ? 'Editar combinación de plaza' : 'Nueva combinación de plaza'}
+                                                    </h5>
+                                                    <div className="text-muted font-size-sm">
+                                                        {editandoItemMatriz
+                                                            ? 'Actualiza la modalidad, nivel, especialidad o característica de esta combinación.'
+                                                            : 'Agrega una modalidad, nivel, especialidad y característica a la matriz seleccionada.'}
+                                                    </div>
+                                                </div>
+
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-sm btn-light"
+                                                    onClick={cerrarPanelItemMatriz}
+                                                >
+                                                    <i className="fas fa-times mr-1" />
+                                                    Cerrar
+                                                </button>
+                                            </div>
+
+                                            <div className="row">
+                                                <div className="col-lg-3 mb-4">
+                                                    <label className="font-weight-bold font-size-sm">Modalidad</label>
+                                                    <select
+                                                        className="form-control"
+                                                        value={formItemMatriz.modalidad_id}
+                                                        onChange={(e) => actualizarCampoItemMatriz('modalidad_id', e.target.value)}
+                                                    >
+                                                        <option value="">Seleccionar</option>
+                                                        {modalidades.filter((m) => m.activo).map((m) => (
+                                                            <option key={m.id} value={m.id}>{m.nombre}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                <div className="col-lg-3 mb-4">
+                                                    <label className="font-weight-bold font-size-sm">Nivel</label>
+                                                    <select
+                                                        className="form-control"
+                                                        value={formItemMatriz.nivel_id}
+                                                        onChange={(e) => actualizarCampoItemMatriz('nivel_id', e.target.value)}
+                                                        disabled={!formItemMatriz.modalidad_id}
+                                                    >
+                                                        <option value="">Seleccionar</option>
+                                                        {nivelesFormItem.map((n) => (
+                                                            <option key={n.id} value={n.id}>{n.nombre}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                <div className="col-lg-3 mb-4">
+                                                    <label className="font-weight-bold font-size-sm">Especialidad</label>
+                                                    <select
+                                                        className="form-control"
+                                                        value={formItemMatriz.especialidad_id}
+                                                        onChange={(e) => actualizarCampoItemMatriz('especialidad_id', e.target.value)}
+                                                        disabled={!formItemMatriz.nivel_id}
+                                                    >
+                                                        <option value="">Seleccionar</option>
+                                                        {especialidadesFormItem.map((e) => (
+                                                            <option key={e.id} value={e.id}>{e.nombre}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                <div className="col-lg-3 mb-4">
+                                                    <label className="font-weight-bold font-size-sm">Característica</label>
+                                                    <select
+                                                        className="form-control"
+                                                        value={formItemMatriz.caracteristica_id}
+                                                        onChange={(e) => actualizarCampoItemMatriz('caracteristica_id', e.target.value)}
+                                                    >
+                                                        <option value="">Seleccionar</option>
+
+                                                        {!editandoItemMatriz && caracteristicasFormItem.length > 1 && (
+                                                            <option value="TODAS">Todas las características</option>
+                                                        )}
+
+                                                        {caracteristicasFormItem.map((c) => (
+                                                            <option key={c.id} value={c.id}>{c.nombre}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                <div className="col-lg-2 mb-4">
+                                                    <label className="font-weight-bold font-size-sm">Orden</label>
+                                                    <input
+                                                        type="number"
+                                                        className="form-control"
+                                                        min="1"
+                                                        value={formItemMatriz.orden}
+                                                        onChange={(e) => actualizarCampoItemMatriz('orden', e.target.value)}
+                                                    />
+                                                </div>
+
+                                                <div className="col-lg-10 mb-4">
+                                                    <label className="font-weight-bold font-size-sm">Observaciones</label>
+                                                    <input
+                                                        type="text"
+                                                        className="form-control"
+                                                        placeholder="Opcional"
+                                                        value={formItemMatriz.observaciones}
+                                                        onChange={(e) => actualizarCampoItemMatriz('observaciones', e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="d-flex justify-content-end">
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-light font-weight-bold mr-3"
+                                                    onClick={cerrarPanelItemMatriz}
+                                                    disabled={guardandoItemMatriz}
+                                                >
+                                                    Cancelar
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-primary font-weight-bold"
+                                                    onClick={guardarItemMatriz}
+                                                    disabled={guardandoItemMatriz}
+                                                >
+                                                    {guardandoItemMatriz ? (
+                                                        <>
+                                                            <span className="spinner-border spinner-border-sm mr-2" />
+                                                            Guardando...
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <i className="fas fa-save mr-2" />
+                                                            {editandoItemMatriz ? 'Actualizar combinación' : 'Guardar combinación'}
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="row mb-5">
+                                        <div className="col-lg-4 mb-3">
+                                            <select
+                                                className="form-control"
+                                                value={filtrosMatriz.modalidad_id}
+                                                onChange={(e) => setFiltrosMatriz({
+                                                    modalidad_id: e.target.value,
+                                                    nivel_id: '',
+                                                    especialidad_id: '',
+                                                })}
+                                            >
+                                                <option value="">Todas las modalidades</option>
+                                                {modalidades.map((m) => (
+                                                    <option key={m.id} value={m.id}>{m.nombre}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="col-lg-4 mb-3">
+                                            <select
+                                                className="form-control"
+                                                value={filtrosMatriz.nivel_id}
+                                                onChange={(e) => setFiltrosMatriz((prev) => ({
+                                                    ...prev,
+                                                    nivel_id: e.target.value,
+                                                    especialidad_id: '',
+                                                }))}
+                                                disabled={!filtrosMatriz.modalidad_id}
+                                            >
+                                                <option value="">Todos los niveles</option>
+                                                {nivelesFiltroMatriz.map((n) => (
+                                                    <option key={n.id} value={n.id}>{n.nombre}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="col-lg-4 mb-3">
+                                            <select
+                                                className="form-control"
+                                                value={filtrosMatriz.especialidad_id}
+                                                onChange={(e) => setFiltrosMatriz((prev) => ({
+                                                    ...prev,
+                                                    especialidad_id: e.target.value,
+                                                }))}
+                                                disabled={!filtrosMatriz.nivel_id}
+                                            >
+                                                <option value="">Todas las especialidades</option>
+                                                {especialidadesFiltroMatriz.map((e) => (
+                                                    <option key={e.id} value={e.id}>{e.nombre}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {cargandoItemsMatriz ? (
+                                        <SpinnerCarga texto="Cargando combinaciones..." />
+                                    ) : itemsMatrizFiltrados.length === 0 ? (
+                                        <div
+                                            className="rounded p-6 text-center"
+                                            style={{ background: '#F8F9FA', border: '1px dashed #D1D3E0' }}
+                                        >
+                                            <i className="fas fa-project-diagram text-muted mb-4" style={{ fontSize: 36 }} />
+                                            <div className="font-weight-bolder text-dark mb-1">
+                                                No hay combinaciones para esta selección
+                                            </div>
+                                            <div className="text-muted font-size-sm">
+                                                Cambia los filtros o revisa si la matriz tiene items activos.
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="table-responsive">
+                                            <table className="table table-head-custom table-vertical-center mb-0">
+                                                <thead>
+                                                    <tr>
+                                                        <th style={{ width: 55 }}>#</th>
+                                                        <th>Modalidad</th>
+                                                        <th>Nivel</th>
+                                                        <th>Especialidad</th>
+                                                        <th>Característica</th>
+                                                        <th>Tipo</th>
+                                                        <th>Estado</th>
+                                                        <th className="text-right">Acciones</th>
+                                                    </tr>
+                                                </thead>
+
+                                                <tbody>
+                                                    {itemsMatrizFiltrados.map((item, idx) => (
+                                                        <tr key={item.id} style={{ opacity: item.activo ? 1 : 0.55 }}>
+                                                            <td className="font-weight-bold text-muted">{idx + 1}</td>
+
+                                                            <td>
+                                                                <span className="font-weight-bold text-dark font-size-sm">
+                                                                    {item.modalidad_nombre || getNombreModalidad(item.modalidad_id)}
+                                                                </span>
+                                                            </td>
+
+                                                            <td>
+                                                                <span className="font-weight-bold text-dark font-size-sm">
+                                                                    {item.nivel_nombre || getNombreNivel(item.nivel_id)}
+                                                                </span>
+                                                            </td>
+
+                                                            <td>
+                                                                <div className="d-flex align-items-center" style={{ gap: 8 }}>
+                                                                    <div
+                                                                        style={{
+                                                                            width: 18,
+                                                                            height: 18,
+                                                                            borderRadius: 4,
+                                                                            backgroundColor:
+                                                                                item.color_folder_hex ||
+                                                                                item.especialidad_color_hex ||
+                                                                                item.especialidad?.color_folder_hex ||
+                                                                                '#3699FF',
+                                                                            border: '1px solid rgba(0,0,0,0.1)',
+                                                                            flexShrink: 0,
+                                                                        }}
+                                                                    />
+                                                                    <div>
+                                                                        <div className="font-weight-bold text-dark font-size-sm">
+                                                                            {item.especialidad_nombre || getNombreEspecialidad(item.especialidad_id)}
+                                                                        </div>
+                                                                        {item.color_folder && (
+                                                                            <div className="text-muted font-size-xs">
+                                                                                {item.color_folder}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+
+                                                            <td>
+                                                                <span className="label label-inline font-weight-bold" style={{ background: '#F3F6F9', color: '#7E8299' }}>
+                                                                    {item.caracteristica_nombre || item.caracteristica?.nombre || `ID ${item.caracteristica_id}`}
+                                                                </span>
+                                                            </td>
+
+                                                            <td>
+                                                                {item.es_agregado_local ? (
+                                                                    <Badge label="Local" bg={THEME.warningBg} color={THEME.warning} />
+                                                                ) : (
+                                                                    <Badge label="Base" bg={THEME.accentBg} color={THEME.accent} />
+                                                                )}
+                                                            </td>
+
+                                                            <td>
+                                                                {item.activo ? (
+                                                                    <Badge label="Activo" bg={THEME.successBg} color={THEME.success} />
+                                                                ) : (
+                                                                    <Badge label="Inactivo" bg="#F3F6F9" color={THEME.muted} />
+                                                                )}
+                                                            </td>
+
+                                                            <td className="text-right">
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn btn-icon btn-sm btn-light-primary mr-2"
+                                                                    onClick={() => abrirEditarItemMatriz(item)}
+                                                                    title="Editar combinación"
+                                                                    disabled={!puedeEditarCombinaciones(matrizSeleccionada)}
+                                                                >
+                                                                    <i className="fas fa-pencil-alt" />
+                                                                </button>
+
+                                                                <button
+                                                                    type="button"
+                                                                    className={`btn btn-icon btn-sm ${item.activo ? 'btn-light-danger' : 'btn-light-success'}`}
+                                                                    onClick={() => cambiarEstadoItemMatriz(item)}
+                                                                    title={item.activo ? 'Desactivar combinación' : 'Reactivar combinación'}
+                                                                    disabled={!puedeEditarCombinaciones(matrizSeleccionada)}
+                                                                >
+                                                                    <i className={`fas ${item.activo ? 'fa-ban' : 'fa-check'}`} />
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ── CATÁLOGO BASE ── */}
+                    <div className="card card-custom mb-7">
+                        <div className="card-header">
+                            <div className="card-title">
+                                <span className="card-icon">
+                                    <i className="fas fa-cogs text-primary" />
+                                </span>
+                                <h3 className="card-label font-weight-bolder">
+                                    Catálogo base
+                                </h3>
+                            </div>
+
+                            <div className="card-toolbar">
+                                {puedeEditarCatalogoBase(vistaCatalogoBase) && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-primary font-weight-bold"
+                                        onClick={abrirCrear}
+                                    >
+                                        <i className="fas fa-plus mr-2" />
+                                        Nuevo registro
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="card-body p-6">
+                            <div className="d-flex flex-wrap mb-6" style={{ gap: 8 }}>
+                                {[
+                                    { id: 'modalidades', label: 'Modalidades', icon: 'fa-graduation-cap', count: modalidades.length },
+                                    { id: 'niveles', label: 'Niveles', icon: 'fa-layer-group', count: niveles.length },
+                                    { id: 'especialidades', label: 'Especialidades', icon: 'fa-folder', count: especialidades.length },
+                                    { id: 'caracteristicas', label: 'Características', icon: 'fa-tags', count: caracteristicas.length },
+                                ].map((tab) => (
+                                    <button
+                                        key={tab.id}
+                                        type="button"
+                                        className={`btn font-weight-bold ${vistaCatalogoBase === tab.id ? 'btn-primary' : 'btn-light'}`}
+                                        onClick={() => cambiarVistaCatalogoBase(tab.id)}
+                                    >
+                                        <i className={`fas ${tab.icon} mr-2`} />
+                                        {tab.label}
+                                        <span className="ml-2 label label-inline label-light font-weight-bold">
+                                            {tab.count}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div
+                                className="rounded p-4 mb-5"
+                                style={{ background: '#F8F9FA', border: '1px solid #EBEDF3' }}
+                            >
+                                <div className="font-weight-bolder text-dark">
+                                    {obtenerTituloCatalogoBase()}
+                                </div>
+                                <div className="text-muted font-size-sm">
+                                    Gestiona los registros base que alimentan las matrices de plaza.
+                                </div>
+                            </div>
+
+                            {listaCatalogoBase.length === 0 ? (
+                                <EstadoVacio
+                                    mensaje="Sin registros"
+                                    submensaje="Crea el primer registro para este catálogo."
+                                    onAccion={abrirCrear}
+                                    textoAccion="Crear registro"
+                                />
+                            ) : (
+                                <div className="table-responsive">
+                                    <table className="table table-head-custom table-vertical-center mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Nombre</th>
+                                                <th>Código</th>
+                                                <th>Relación / detalle</th>
+                                                <th>Estado</th>
+                                                <th className="text-right">Acciones</th>
+                                            </tr>
+                                        </thead>
+
+                                        <tbody>
+                                            {listaCatalogoBase.map((item) => (
+                                                <tr key={item.id}>
+                                                    <td>
+                                                        <div className="font-weight-bolder text-dark">
+                                                            {item.nombre}
+                                                        </div>
+
+                                                        {vistaCatalogoBase === 'especialidades' && (
+                                                            <div className="d-flex align-items-center mt-1" style={{ gap: 6 }}>
+                                                                <div
+                                                                    style={{
+                                                                        width: 16,
+                                                                        height: 16,
+                                                                        borderRadius: 4,
+                                                                        backgroundColor: item.color_folder_hex || '#3699FF',
+                                                                        border: '1px solid rgba(0,0,0,0.1)',
+                                                                    }}
+                                                                />
+                                                                <span className="text-muted font-size-xs">
+                                                                    {item.color_folder || 'Sin color'}
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                    </td>
+
+                                                    <td>
+                                                        <span className="label label-inline label-light-primary font-weight-bold">
+                                                            {item.codigo || '—'}
+                                                        </span>
+                                                    </td>
+
+                                                    <td className="text-muted font-size-sm">
+                                                        {obtenerRelacionCatalogoBase(item)}
+                                                    </td>
+
+                                                    <td>
+                                                        {item.activo ? (
+                                                            <Badge label="Activo" bg={THEME.successBg} color={THEME.success} />
+                                                        ) : (
+                                                            <Badge label="Inactivo" bg="#F3F6F9" color={THEME.muted} />
+                                                        )}
+                                                    </td>
+
+                                                    <td className="text-right">
+                                                        {puedeEditarCatalogoBase(vistaCatalogoBase, item) ? (
+                                                            <>
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn btn-icon btn-sm btn-light-primary mr-2"
+                                                                    onClick={() => abrirEditar(item)}
+                                                                    title="Editar"
+                                                                >
+                                                                    <i className="fas fa-pencil-alt" />
+                                                                </button>
+
+                                                                {vistaCatalogoBase !== 'caracteristicas' && item.activo && (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="btn btn-icon btn-sm btn-light-danger"
+                                                                        onClick={() => eliminar(item)}
+                                                                        title="Desactivar"
+                                                                    >
+                                                                        <i className="fas fa-ban" />
+                                                                    </button>
+                                                                )}
+                                                            </>
+                                                        ) : (
+                                                            <span className="label label-inline font-weight-bold" style={{ background: '#F3F6F9', color: '#7E8299' }}>
+                                                                Solo lectura
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* ════════════════════════════════════════════════════
+                MODAL — ITEMS DE MATRIZ
+            ════════════════════════════════════════════════════ */}
+            {modalItemsMatrizAbierto && (
+                <div
+                    className="modal fade show d-block"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}
+                    onClick={(e) => { if (e.target === e.currentTarget) cerrarModalItemsMatriz() }}
+                >
+                    <div className="modal-dialog modal-dialog-centered modal-xl">
+                        <div className="modal-content border-0" style={{ borderRadius: 12 }}>
+                            <div
+                                className="modal-header border-0 px-7 pt-7 pb-4"
+                                style={{ background: HEADER_GRADIENT, borderRadius: '12px 12px 0 0' }}
+                            >
+                                <div>
+                                    <h5 className="modal-title text-white font-weight-bolder">
+                                        Combinaciones de matriz
+                                    </h5>
+                                    <p className="text-white mb-0 font-size-sm" style={{ opacity: 0.75 }}>
+                                        {matrizSeleccionada?.nombre || 'Matriz seleccionada'}
+                                    </p>
+                                </div>
+
+                                <button
+                                    className="btn btn-icon btn-sm"
+                                    style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}
+                                    onClick={cerrarModalItemsMatriz}
+                                >
+                                    <i className="fas fa-times text-white" />
+                                </button>
+                            </div>
+
+                            <div className="modal-body px-7 py-6">
+                                {cargandoItemsMatriz ? (
+                                    <SpinnerCarga texto="Cargando combinaciones..." />
+                                ) : itemsMatriz.length === 0 ? (
+                                    <EstadoVacio
+                                        mensaje="Sin combinaciones"
+                                        submensaje="Esta matriz no tiene items activos registrados."
+                                    />
+                                ) : (
+                                    <div className="table-responsive" style={{ maxHeight: 520, overflowY: 'auto' }}>
+                                        <table className="table table-hover">
+                                            <thead>
+                                                <tr style={{ backgroundColor: '#F3F6F9' }}>
+                                                    <th className="font-weight-bolder text-muted font-size-sm border-0 pl-4">Modalidad</th>
+                                                    <th className="font-weight-bolder text-muted font-size-sm border-0">Nivel</th>
+                                                    <th className="font-weight-bolder text-muted font-size-sm border-0">Especialidad</th>
+                                                    <th className="font-weight-bolder text-muted font-size-sm border-0">Característica</th>
+                                                    <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Tipo</th>
+                                                    <th className="font-weight-bolder text-muted font-size-sm border-0 text-center">Estado</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {itemsMatriz.map((item) => (
+                                                    <tr key={item.id} style={{ opacity: item.activo ? 1 : 0.55 }}>
+                                                        <td className="pl-4 align-middle font-weight-bold text-dark">
+                                                            {item.modalidad_nombre || item.modalidad?.nombre || `ID ${item.modalidad_id}`}
+                                                        </td>
+
+                                                        <td className="align-middle text-muted font-size-sm">
+                                                            {item.nivel_nombre || item.nivel?.nombre || `ID ${item.nivel_id}`}
+                                                        </td>
+
+                                                        <td className="align-middle">
+                                                            <div className="d-flex align-items-center" style={{ gap: 8 }}>
+                                                                <div
+                                                                    style={{
+                                                                        width: 18,
+                                                                        height: 18,
+                                                                        borderRadius: 4,
+                                                                        backgroundColor: item.especialidad_color_hex || item.especialidad?.color_folder_hex || '#3699FF',
+                                                                        border: '1px solid rgba(0,0,0,0.1)',
+                                                                        flexShrink: 0,
+                                                                    }}
+                                                                />
+                                                                <span className="font-weight-bold text-dark font-size-sm">
+                                                                    {item.especialidad_nombre || item.especialidad?.nombre || `ID ${item.especialidad_id}`}
+                                                                </span>
+                                                            </div>
+                                                        </td>
+
+                                                        <td className="align-middle text-muted font-size-sm">
+                                                            {item.caracteristica_nombre || item.caracteristica?.nombre || `ID ${item.caracteristica_id}`}
+                                                        </td>
+
+                                                        <td className="text-center align-middle">
+                                                            {item.es_agregado_local ? (
+                                                                <Badge label="Local" bg={THEME.warningBg} color={THEME.warning} />
+                                                            ) : (
+                                                                <Badge label="Base" bg={THEME.accentBg} color={THEME.accent} />
+                                                            )}
+                                                        </td>
+
+                                                        <td className="text-center align-middle">
+                                                            {item.activo
+                                                                ? <Badge label="Activo" bg={THEME.successBg} color={THEME.success} />
+                                                                : <Badge label="Inactivo" bg="#F3F6F9" color={THEME.muted} />
+                                                            }
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="modal-footer border-0 px-7 pb-7 pt-0">
+                                <button
+                                    className="btn btn-light font-weight-bold"
+                                    onClick={cerrarModalItemsMatriz}
+                                >
+                                    Cerrar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ════════════════════════════════════════════════════
                 MODAL — MODALIDAD
